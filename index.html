@@ -276,13 +276,13 @@ body.b3 .dock-head .keep3{order:3;flex:1 0 100%}
         <button id="tz2d" aria-pressed="false">Radar's time zone</button>
         <button id="refresh2d">Refresh now</button>
       </div>
-      <div class="credit no-b3">2D is BoM's own live radar: reflectivity about every 5 minutes for the radar you pick (or all of Australia), and Doppler wind about every 5 minutes within 128 km of a Doppler radar (blue diamonds). Radar © Commonwealth of Australia, Bureau of Meteorology.</div>
+      <div class="credit no-b3">2D is BoM's own live radar: reflectivity about every 5 minutes for the radar you pick (or all of Australia), and Doppler wind about every 5 minutes within 128 km of a Doppler radar (blue diamonds). Radar © Commonwealth of Australia, Bureau of Meteorology. <a href="about.html" style="color:var(--accent)">About and credits</a></div>
     </div>
     <div class="b3only" style="display:grid;gap:10px">
       <div class="row"><label for="b3h">Height</label><input id="b3h" type="range" min="0.5" max="10" step="0.5" value="1"><output id="b3hv">1</output></div>
       <div class="row" id="b3minRow"><label for="b3min">Lowest shown</label><input id="b3min" type="range" min="0" max="10" step="1" value="0"><output id="b3minv">12</output></div>
       <div class="btns"><button id="b3spin" aria-pressed="false">Auto-rotate</button><button id="b3reset">Reset view</button></div>
-      <div class="credit">3D is BoM's own live radar, cut into slices by strength and stacked: light rain stays low, heavy cores stand tall. Doppler wind stacks by wind speed. If BoM stops answering, the app switches to RainViewer by itself. Radar © Commonwealth of Australia, Bureau of Meteorology.</div>
+      <div class="credit">3D is BoM's own live radar, cut into slices by strength and stacked: light rain stays low, heavy cores stand tall. Doppler wind stacks by wind speed. If BoM stops answering, the app switches to RainViewer by itself. Radar © Commonwealth of Australia, Bureau of Meteorology. <a href="about.html" style="color:var(--accent)">About and credits</a></div>
     </div>
     <div class="frames only3d" id="frames" aria-label="Radar frames; tap to hide or show one"></div>
     <div class="row only3d"><label for="gap">Layer gap</label><input id="gap" type="range" min="0" max="10" step="0.5" value="1"><output id="gapv">1</output></div>
@@ -301,7 +301,7 @@ body.b3 .dock-head .keep3{order:3;flex:1 0 100%}
       <button id="refresh">Refresh now</button>
     </div>
     <div class="keyrow only3d"><span><i class="d"></i>Doppler radar</span><span><i></i>Rain-only radar</span></div>
-    <div class="credit only3d" id="credit">Each layer is one radar frame, oldest at the bottom. Radar © Commonwealth of Australia, Bureau of Meteorology.</div>
+    <div class="credit only3d" id="credit">Each layer is one radar frame, oldest at the bottom. Radar © Commonwealth of Australia, Bureau of Meteorology. <a href="about.html" style="color:var(--accent)">About and credits</a></div>
   </div>
 </div>
 
@@ -1299,5 +1299,6 @@ const WARN=(()=>{
   return{start,draw,refresh}})();
 WARN.start();
 </script>
+<script src="notice.js"></script>
 </body>
 </html>

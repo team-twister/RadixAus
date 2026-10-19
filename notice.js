@@ -1,6 +1,6 @@
 /* One-time "unofficial, not for safety" notice, shown on first visit. Shared by every page. */
 (function(){
-  const KEY='tt-notice-v1';
+  const KEY='tt-notice-v2';   // bumped when the wording changes, so everyone sees the new version once
   let seen=false;try{seen=localStorage.getItem(KEY)==='1'}catch(e){}
   if(seen)return;
   const css=`.ttn{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;background:rgba(0,0,0,.7);padding:16px;
