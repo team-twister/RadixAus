@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#161618">
-<title>RadixAus · Storm History</title>
-<meta name="description" content="Rebuild any past Australian storm in 3D from the Bureau of Meteorology radar archive.">
+<title>RadixAus · Storm History in 3D</title>
+<meta name="description" content="Rebuild any past Australian storm in 3D from the Bureau of Meteorology radar archive, with before and after satellite maps of storm damage.">
+<link rel="canonical" href="https://team-twister.github.io/radar/history.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="RadixAus">
+<meta property="og:title" content="RadixAus · Storm History in 3D">
+<meta property="og:description" content="Rebuild any past Australian storm in 3D from the Bureau of Meteorology radar archive, with before and after satellite maps of storm damage.">
+<meta property="og:url" content="https://team-twister.github.io/radar/history.html">
 <style>
 /* Layout: RadarScope-style. Solid site bar on top; full-bleed 3D view; bottom panel = product bar + colour strip + toolbar + time; settings fold out below. */
 :root{
@@ -224,6 +230,8 @@ body.picking #scene{cursor:crosshair}
     <div class="row lift" data-views="tilts blocks shells volume"><label for="lift">Lift off map</label><input id="lift" type="range" min="0" max="40" step="1" value="0"><output id="liftv">0 km</output></div>
     <div class="row"><label for="exag">Height ×</label><input id="exag" type="range" min="1" max="5" step="0.5" value="2.5"><output id="exagv">2.5</output></div>
     <div class="row" data-views="tilts blocks shells volume"><label for="cut">Cut away</label><input id="cut" type="range" min="-150" max="150" value="-150"><output id="cutv">off</output></div>
+    <div class="chips" id="skyRow"><span class="lbl">Daylight</span><button class="chip sel" id="skyFollow" aria-pressed="true">Follows replay time</button></div>
+    <div class="row" id="skyHourRow" hidden><label for="skyHour">Time of day</label><input id="skyHour" type="range" min="0" max="23.75" step="0.25" value="15"><output id="skyHourv">3:00 pm</output></div>
     <div class="chips" id="satRow"><span class="lbl">Satellite</span><button class="chip sel" id="satToday" aria-pressed="true">Today</button><button class="chip sel" id="satBefore" aria-pressed="false">Before</button><button class="chip sel" id="satAfter" aria-pressed="false">After</button><button class="chip sel" id="satSweep" aria-pressed="false">Storm sweep</button><button class="chip sel" id="satDmg" aria-pressed="false">Damage overlay</button></div>
     <div class="chips" id="sweepBy" hidden><span class="lbl">Sweep by</span><button class="chip sel" id="byCore" aria-pressed="true">Core (reflectivity)</button><button class="chip sel" id="byVel" aria-pressed="false">Velocity intensity</button></div>
     <div class="row" id="sweepRow" hidden><label for="sweepTh">Core from</label><input id="sweepTh" type="range" min="30" max="60" value="45"><output id="sweepThv">45 dBZ</output></div>
@@ -309,8 +317,13 @@ const groundLevel=()=>Math.max(0.5,SKY.ground??1)*(st.view==='volume'&&!st.grey?
 const SKY={dir:new THREE.Vector3(-0.5,0.7,0.4).normalize(),key:''};
 const hemi=scene.children.find(o=>o.isHemisphereLight);
 const skyCanvas=document.createElement('canvas');skyCanvas.width=2;skyCanvas.height=256;const skyTex=new THREE.CanvasTexture(skyCanvas);
+// daylight: follows the replay's time (default), or a fixed time of day you pick with the slider (radar's local time)
+const SKYC={follow:true,hour:15};try{const s=JSON.parse(localStorage.getItem('hist-sky')||'null');if(s){SKYC.follow=s.follow!==false;SKYC.hour=+s.hour||15}}catch(e){}
+function skyTime(ms,site){if(SKYC.follow)return ms;const tz=tzOf(site);const off=tz?tzOffset(ms,tz):-new Date(ms).getTimezoneOffset()*6e4;
+  return Math.floor((ms+off)/864e5)*864e5-off+SKYC.hour*36e5}
+function skyNow(){if(session&&frames[st.t]&&frames[st.t].entry)applySky(frames[st.t].entry.time,session.site)}
 function applySky(ms,site){
-  if(!ms||!site)return;const k=Math.round(ms/6e4)+'|'+site.id;if(k===SKY.key)return;SKY.key=k;
+  if(!ms||!site)return;ms=skyTime(ms,site);const k=Math.round(ms/6e4)+'|'+site.id;if(k===SKY.key)return;SKY.key=k;
   const{el,az}=sunPos(ms,site.lat,site.lon);
   let i=0;while(i<SKYK.length-2&&el>SKYK[i+1][0])i++;const A=SKYK[i],B=SKYK[i+1],t=Math.max(0,Math.min(1,(el-A[0])/(B[0]-A[0])));
   const mix=(a,b)=>new THREE.Color(a).lerp(new THREE.Color(b),t),num=(a,b)=>a+(b-a)*t;
@@ -500,6 +513,12 @@ function satSweep(){
   SAT.maskTex.needsUpdate=true;const u=satMat.uniforms;u.uMask.value=SAT.maskTex;u.uGrid.value.set(G.x0,G.y0,G.nx*G.dx,G.ny*G.dx)}
 function setSat(mode){SAT.mode=mode;[['today','satToday'],['before','satBefore'],['after','satAfter'],['sweep','satSweep']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===mode));
   $('sweepRow').hidden=mode!=='sweep'||!SAT.byCore;$('velRow').hidden=mode!=='sweep'||!SAT.byVel;$('sweepBy').hidden=mode!=='sweep';if(mode==='today'&&!SAT.dmg){satDrop();satInfo('');return}satEnsure()}
+const hourTxt=x=>{const H=Math.floor(x),M=Math.round((x-H)*60),h12=H%12||12;return`${h12}:${String(M).padStart(2,'0')} ${H<12?'am':'pm'}`};
+function syncSky(init){$('skyFollow').setAttribute('aria-pressed',SKYC.follow);$('skyHourRow').hidden=SKYC.follow;$('skyHour').value=SKYC.hour;$('skyHourv').textContent=hourTxt(SKYC.hour);
+  if(init)return;try{localStorage.setItem('hist-sky',JSON.stringify(SKYC))}catch(e){}SKY.key='';skyNow();render()}
+$('skyFollow').onclick=()=>{SKYC.follow=!SKYC.follow;syncSky()};
+$('skyHour').oninput=()=>{SKYC.hour=+$('skyHour').value;syncSky()};
+syncSky(true);
 $('satToday').onclick=()=>setSat('today');$('satBefore').onclick=()=>setSat('before');$('satAfter').onclick=()=>setSat('after');$('satSweep').onclick=()=>setSat('sweep');
 $('satDmg').onclick=()=>{SAT.dmg=!SAT.dmg;$('satDmg').setAttribute('aria-pressed',SAT.dmg);if(!SAT.dmg){satShow();if(SAT.mode==='today')satInfo('');return}satEnsure()};
 const syncBy=()=>{$('byCore').setAttribute('aria-pressed',SAT.byCore);$('byVel').setAttribute('aria-pressed',SAT.byVel);$('sweepRow').hidden=SAT.mode!=='sweep'||!SAT.byCore;$('velRow').hidden=SAT.mode!=='sweep'||!SAT.byVel;satSweep()};
