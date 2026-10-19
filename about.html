@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161618">
+<title>About RadixAus</title>
+<meta name="description" content="Disclaimer, data credits and licences for the Team Twister radar app.">
+<style>
+:root{--bg:#000;--card:#1c1c1e;--fg:#fff;--muted:#a1a1a6;--accent:#bf5af2;--warn:#ffd60a;--line:#38383a;
+  --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.55 var(--ui);margin:0;-webkit-font-smoothing:antialiased}
+.top{position:sticky;top:0;background:#161618;border-bottom:1px solid var(--line);padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));display:flex;justify-content:space-between;align-items:center;gap:10px}
+.top h1{margin:0;font-size:1.15rem;font-weight:600}
+.top h1 span{color:var(--accent)}
+.top a{font:600 .82rem var(--ui);color:var(--accent);background:#2c2c2e;border-radius:9px;padding:8px 12px;text-decoration:none}
+main{max-width:680px;margin:0 auto;padding:18px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+.alert{background:#2a2410;border:1px solid #5c4a10;border-radius:14px;padding:14px 16px;margin-bottom:22px}
+.alert b{color:var(--warn)}
+h2{font-size:1.05rem;margin:26px 0 8px}
+p,li{color:#d1d1d6;margin:0 0 10px}
+ul{padding-left:20px;margin:0 0 10px}
+a{color:var(--accent)}
+.card{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+.card h3{margin:0 0 4px;font-size:.98rem}
+.card p{margin:0 0 6px;font-size:.92rem}
+.card p:last-child{margin:0}
+.small{font-size:.82rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="top"><h1>Radix<span>Aus</span></h1><a href="index.html">Back to radar</a></header>
+<main>
+  <div class="alert"><b>Not for safety decisions.</b> RadixAus is an independent radar app, not an official warning service. Radar here can be late, missing, misaligned or wrong. For warnings, always use the <a href="https://www.bom.gov.au/weather-and-climate/warnings-and-alerts" target="_blank" rel="noopener">Bureau of Meteorology's official warnings</a> and your state emergency service. In an emergency call <b>000</b>. For storm or flood help call the SES on <b>132 500</b>.</div>
+
+  <h2>Who made this</h2>
+  <p>RadixAus is a free storm-chasing radar made by Team Twister. It is <b>not affiliated with, endorsed by or connected to the Bureau of Meteorology</b>, the Commonwealth of Australia, NCI Australia, RainViewer, Esri, or the makers of RadarScope or GR2Analyst. Those names are used only to describe data sources and display styles.</p>
+
+  <h2>Where the data comes from</h2>
+  <div class="card">
+    <h3>Live radar (Live HD)</h3>
+    <p>Reflectivity map tiles and Doppler wind images from the Bureau of Meteorology. © Commonwealth of Australia, Bureau of Meteorology.</p>
+    <p>Your phone loads these pictures directly from BoM's own servers each time you look. This site does not copy, store, change or sell them. See the <a href="https://www.bom.gov.au/copyright" target="_blank" rel="noopener">BoM copyright terms</a>. If BoM asks, the live radar will be removed or changed.</p>
+  </div>
+  <div class="card">
+    <h3>Weather History and the 3D storm pages</h3>
+    <p>Radar volumes from the Australian Unified Radar Archive (AURA) Level 1 data, Bureau of Meteorology, hosted by <a href="https://opus.nci.org.au/spaces/NDP/pages/399803630/Operational+Radars+rq0" target="_blank" rel="noopener">NCI Australia</a>.</p>
+    <p>Bureau of Meteorology, © Commonwealth of Australia. Licensed from the Commonwealth of Australia under a <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution 4.0 International licence</a>. This app changes the data: it regrids the scans and draws them as 3D blocks, shells and volume renders. These changes are Team Twister's, not BoM's.</p>
+  </div>
+  <div class="card">
+    <h3>3D stack (stack.html)</h3>
+    <p>Reflectivity from BoM where available, otherwise from the <a href="https://www.rainviewer.com/api.html" target="_blank" rel="noopener">RainViewer API</a> (© RainViewer). The live radar also switches to RainViewer by itself if BoM stops answering.</p>
+  </div>
+  <div class="card">
+    <h3>Weather warnings</h3>
+    <p>Current warnings from the Bureau of Meteorology's weather website feed. © Commonwealth of Australia, Bureau of Meteorology. Thunderstorm areas on the map are drawn by this app around the towns each warning names, so they're approximate and not BoM's official warning areas.</p>
+  </div>
+  <div class="card">
+    <h3>Satellite before and after, damage overlay</h3>
+    <p>Harmonized Landsat and Sentinel-2 (HLS) imagery and OPERA land surface disturbance alerts from NASA, via <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" target="_blank" rel="noopener">NASA GIBS</a>, part of NASA's Earth Science Data and Information System (ESDIS). Landsat imagery courtesy of NASA and the U.S. Geological Survey; Sentinel-2 contains modified Copernicus Sentinel data, processed by ESA and NASA.</p>
+  </div>
+  <div class="card">
+    <h3>Maps</h3>
+    <p>Dark base map © Bureau of Meteorology. Satellite imagery and place names © Esri, Maxar, Earthstar Geographics and the GIS User Community.</p>
+  </div>
+  <div class="card">
+    <h3>Software</h3>
+    <p><a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a> (BSD 2-Clause), <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT), <a href="https://maplibre.org" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD 3-Clause), <a href="https://github.com/usnistgov/h5wasm" target="_blank" rel="noopener">h5wasm</a> and the HDF5 library, each under its own open-source licence.</p>
+  </div>
+
+  <h2>Privacy</h2>
+  <p>No accounts, no ads, no tracking, and nothing you do is sent to Team Twister. Settings such as your chosen radar are saved only on your own phone. <b>My location</b> is used only on your phone to centre the map and pick the nearest radar. Like any map, your phone asks BoM, NCI, Esri and the other sources above for the images of the area you're viewing.</p>
+
+  <h2>Contact and takedown</h2>
+  <p>Questions, corrections, or a rights holder who wants something changed or removed: contact Team Twister on TikTok at <b>@team.twister.official</b>. Requests from data owners will be acted on promptly.</p>
+  <p class="small">Last updated October 2026.</p>
+</main>
+</body>
+</html>

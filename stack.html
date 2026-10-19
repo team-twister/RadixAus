@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161618">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Live 3D Radar</title>
+<meta name="description" content="Live Bureau of Meteorology radar in 3D: the stronger the echo, the higher it rises.">
+<style>
+/* Layout: RadarScope-style. Radar bar on top; full-screen 3D scene; bottom panel = product bar, colour strip, mode switch, time; settings fold out below. */
+:root{
+  --bg:#000; --bar:#161618; --panel:rgba(22,22,24,.96); --fill:#2c2c2e; --line:#38383a;
+  --fg:#fff; --muted:#8e8e93; --accent:#bf5af2; --live:#ff453a; --warn:#ffd60a;
+  --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.3 var(--ui);overflow:hidden;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+button,select{font-family:var(--ui)}
+/* 3D scene */
+#view{position:fixed;inset:0;overflow:hidden;background:radial-gradient(ellipse at 50% 30%,#101820,#05080c 70%);touch-action:none;perspective:1100px;perspective-origin:50% 40%;cursor:grab}
+#view.drag{cursor:grabbing}
+#world{position:absolute;left:50%;top:52%;width:0;height:0;transform-style:preserve-3d}
+.plane{position:absolute;left:0;top:0;transform-style:flat;pointer-events:none}
+.plane img{position:absolute;width:256px;height:256px;display:block;user-select:none;-webkit-user-drag:none}
+.ground img{filter:brightness(.9)}
+.shadowp{filter:brightness(0) blur(2px);opacity:.42}
+.ringsvg{position:absolute;overflow:visible;pointer-events:none}
+.mark{position:absolute;width:0;height:0;transform-style:preserve-3d}
+.mark i{position:absolute;left:-6px;top:-6px;width:12px;height:12px;transform:rotate(45deg);background:var(--live);border:2px solid #fff}
+.tag{position:absolute;left:10px;top:-9px;font:600 11px var(--ui);color:#fff;white-space:nowrap;text-shadow:0 1px 3px #000,0 0 6px #000}
+/* top bar */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:10;background:var(--bar);border-bottom:1px solid var(--line);
+  padding-top:calc(8px + env(safe-area-inset-top,0px));padding-bottom:8px;
+  padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:space-between;align-items:center;gap:10px}
+.site{min-width:0;flex:1}
+.siteline{font-size:1.22rem;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;display:flex;align-items:center;gap:7px}
+.siteline .code{color:var(--accent);font-weight:700}
+.siteline #siteName{overflow:hidden;text-overflow:ellipsis}
+.dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--live);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,69,58,.6)}70%{box-shadow:0 0 0 7px rgba(255,69,58,0)}100%{box-shadow:0 0 0 0 rgba(255,69,58,0)}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.sub{color:var(--muted);font-size:.84rem;font-weight:500;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hbtns{display:flex;gap:6px;flex:none}
+.pill{font:600 .8rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:9px;padding:8px 11px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.status{position:fixed;z-index:11;left:50%;transform:translateX(-50%);top:calc(68px + env(safe-area-inset-top,0px));
+  font:500 .8rem var(--ui);background:var(--panel);border-radius:10px;padding:8px 12px;max-width:calc(100% - 32px);text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.status.err{color:var(--warn)}
+/* bottom panel */
+.dock{position:fixed;z-index:10;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.dock-in{max-width:700px;margin:0 auto;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+.product{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;padding:9px 2px 6px}
+.pname{color:var(--accent);font-size:1.15rem;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psub{color:var(--muted);font-size:.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptime{text-align:right;flex:none}
+.pclock{color:var(--accent);font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}
+.pclock.old{color:var(--warn)}
+.scale{display:flex;height:9px;overflow:hidden;border-radius:1px}
+.scale i{flex:1}
+.ticks{display:flex;justify-content:space-between;font:500 .62rem var(--ui);color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:9px 0 6px;align-items:center}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;min-width:0;gap:2px;flex:1}
+.seg button{flex:1;font:600 .78rem var(--ui);color:var(--fg);background:transparent;border:0;border-radius:7px;padding:8px 6px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:#636366;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.fold{font:600 .76rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:9px;padding:9px 11px;cursor:pointer}
+.timebar{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:0 0 10px}
+.timebar button{font:600 .78rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:8px;padding:6px 10px;cursor:pointer;min-width:36px}
+.timebar button[aria-pressed="true"]{background:var(--accent);color:#000}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.dock-body{display:grid;gap:11px;padding:10px 0 12px;max-height:36vh;overflow-y:auto;border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:6.4rem 1fr 3.8rem;align-items:center;gap:8px;font-size:.8rem}
+.row label{color:var(--muted);font-size:.74rem;font-weight:500}
+.row output{font:500 .78rem var(--ui);text-align:right;font-variant-numeric:tabular-nums}
+.row select{font:500 .82rem var(--ui);color:var(--fg);background:var(--fill);border:0;border-radius:8px;padding:7px;grid-column:span 2;min-width:0}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.btns button,.btns a{font:500 .78rem var(--ui);color:var(--fg);background:var(--fill);border:0;border-radius:8px;padding:7px 11px;cursor:pointer;text-decoration:none}
+.btns button[aria-pressed="true"]{background:var(--accent);color:#000}
+.note{font-size:.7rem;color:var(--muted);line-height:1.45}
+.hint{position:fixed;z-index:9;left:50%;transform:translateX(-50%);font:500 .74rem var(--ui);color:var(--muted);background:rgba(0,0,0,.55);border-radius:8px;padding:5px 9px;pointer-events:none;white-space:nowrap}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<!-- Filters that keep only the parts of BoM's radar picture at or above each intensity band.
+     BoM's 15 colour bands rank in order of strength by  -R - G - 5B , so one colour formula plus a threshold picks out each level.
+     The browser applies these when drawing; the page itself never reads the picture. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="filters"></defs></svg>
+
+<div id="view" aria-label="3D radar view. Drag to rotate, pinch or scroll to zoom."><div id="world"></div></div>
+<header class="topbar">
+  <div class="site">
+    <div class="siteline"><i class="dot" aria-hidden="true"></i><span class="code" id="siteCode">IDR66</span> <span id="siteName">Brisbane</span></div>
+    <div class="sub" id="siteSub">Live 3D · stronger rain rises higher</div>
+  </div>
+  <div class="hbtns">
+    <a class="pill" href="index.html">HD</a>
+    <a class="pill" href="history.html">History</a>
+  </div>
+</header>
+<div class="status" id="status" hidden></div>
+<div class="hint" id="hint" style="top:calc(70px + env(safe-area-inset-top,0px))">Drag to rotate · pinch to zoom</div>
+
+<div class="dock">
+ <div class="dock-in">
+  <div class="product">
+    <div style="min-width:0"><div class="pname">3D Reflectivity</div><div class="psub" id="psub">BoM radar · height = intensity</div></div>
+    <div class="ptime"><div class="pclock" id="pclock">–</div><div class="psub" id="pago"></div></div>
+  </div>
+  <div>
+    <div class="scale" id="scale"></div>
+    <div class="ticks"><span>12</span><span>23</span><span>31</span><span>37</span><span>43</span><span>49</span><span>55</span><span>61</span><span>64+ dBZ</span></div>
+  </div>
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Style">
+      <button id="mSolid" aria-pressed="true">Solid</button>
+      <button id="mSep" aria-pressed="false">Separated</button>
+      <button id="mFlat" aria-pressed="false">Flat</button>
+    </div>
+    <button class="fold" id="fold" aria-expanded="false">More</button>
+  </div>
+  <div class="timebar">
+    <button id="prev" aria-label="Previous frame">◀</button>
+    <input id="time" type="range" min="0" max="0" value="0" aria-label="Frame">
+    <button id="next" aria-label="Next frame">▶</button>
+    <button id="play" aria-pressed="false">Play</button>
+  </div>
+  <div class="dock-body" id="dockBody" hidden>
+    <div class="row"><label for="siteSel">Radar</label><select id="siteSel"><option>Loading…</option></select></div>
+    <div class="row"><label for="height">Height</label><input id="height" type="range" min="1" max="14" step="0.5" value="5"><output id="heightv">5</output></div>
+    <div class="row"><label for="float">Float height</label><input id="float" type="range" min="0" max="80" value="18"><output id="floatv">18</output></div>
+    <div class="row"><label for="min">Min dBZ</label><input id="min" type="range" min="0" max="10" value="0"><output id="minv">12</output></div>
+    <div class="row"><label for="frames">Loop length</label><select id="frames"><option value="6">30 min</option><option value="12" selected>1 hour</option></select></div>
+    <div class="btns">
+      <button id="locBtn">Nearest radar to me</button>
+      <button id="spin" aria-pressed="false">Auto-rotate</button>
+      <button id="reset">Reset view</button>
+      <button id="refresh">Refresh now</button>
+    </div>
+    <div class="note">The 3D effect comes from BoM's own radar picture: each layer keeps only rain at or above one intensity band, so stronger cores stack higher. It's not real storm height (that needs tilts, which BoM only shares in the archive; use History for that). Heavy on older phones; lower Height layers or use Flat if it stutters. Radar © Commonwealth of Australia, Bureau of Meteorology, personal use only. Built by Team Twister.</div>
+  </div>
+ </div>
+</div>
+
+<script src="archive.js"></script>
+<script>
+/* ================= BoM radar ================= */
+const WMTS='https://api.bom.gov.au/apikey/v1/mapping/timeseries/wmts';
+const LAYER='atm_surf_air_precip_reflectivity_dbz';
+const BASEMAP=(z,y,x)=>`https://api.bom.gov.au/apikey/v1/mapping/basemaps/basemap_dark/MapServer/tile/${z}/${y}/${x}?blankTile=false`;
+const HALF=20037508.342789244,WORLD=HALF*2,Z=8,N=4;      // zoom 8, a 4×4 block of tiles (~550 km across)
+const M8=[11584952,-740105.880375,43,33];
+const BANDS=[[245,245,255],[180,180,255],[120,120,255],[20,20,255],[0,216,195],[0,150,144],[0,102,102],[255,255,0],[255,200,0],[255,150,0],[255,100,0],[255,0,0],[200,0,0],[120,0,0],[40,0,0]];
+const DBZ=[12,23,28,31,34,37,40,43,46,49,52,55,58,61,64];
+const FALLBACK=[[66,'Brisbane (Mt Stapylton)',-27.7178,153.24],[50,'Marburg',-27.6083,152.5394],[8,'Gympie (Mt Kanigan)',-25.9573,152.5769],[22,'Mackay',-21.1173,149.2173],[19,'Cairns',-16.8182,145.663],[71,'Sydney (Terrey Hills)',-33.7008,151.2094],[2,'Melbourne',-37.8552,144.7554],[64,'Adelaide (Buckland Park)',-34.617,138.4688],[70,'Perth (Serpentine)',-32.3918,115.8669],[63,'Darwin (Berrimah)',-12.4559,130.9266],[76,'Hobart (Mt Koonya)',-43.1126,147.8052],[96,'Yeoval',-32.7445,148.7081]];
+const $=id=>document.getElementById(id);
+const iso=d=>d.toISOString().replace(/\.\d{3}Z$/,'Z');
+const store={get(k){try{return JSON.parse(localStorage.getItem('st3-'+k))}catch(e){return null}},set(k,v){try{localStorage.setItem('st3-'+k,JSON.stringify(v))}catch(e){}}};
+function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
+function probe(url,timeout=6000){return new Promise(res=>{const im=new Image();im.referrerPolicy='no-referrer';const t=setTimeout(()=>{im.src='';res(false)},timeout);
+  im.onload=()=>{clearTimeout(t);res(true)};im.onerror=()=>{clearTimeout(t);res(false)};im.src=url})}
+for(const[r,g,b]of BANDS){const i=document.createElement('i');i.style.background=`rgb(${r},${g},${b})`;$('scale').appendChild(i)}
+
+/* ---- one filter per intensity level ---- */
+(function makeFilters(){
+  const score=BANDS.map(([r,g,b])=>-r-g-5*b),lo=Math.min(...score),hi=Math.max(...score),span=hi-lo;
+  const t=score.map(s=>(s-lo)/span);                       // 0 = weakest band, 1 = strongest
+  const k=255/span,cR=-k,cG=-k,cB=-5*k,c0=-lo/span;          // same formula on 0–1 colour values
+  const defs=$('filters');let html='';
+  for(let lvl=1;lvl<BANDS.length;lvl++){
+    const th=(t[lvl-1]+t[lvl])/2,slope=90;
+    html+=`<filter id="lv${lvl}" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${cR.toFixed(6)} ${cG.toFixed(6)} ${cB.toFixed(6)} 0 ${c0.toFixed(6)}" result="s"/>
+      <feComponentTransfer in="s" result="m"><feFuncA type="linear" slope="${slope}" intercept="${(0.5-slope*th).toFixed(4)}"/></feComponentTransfer>
+      <feComposite in="SourceGraphic" in2="m" operator="in"/></filter>`;
+  }
+  defs.innerHTML=html;
+})();
+
+/* ---- state ---- */
+const st={mode:store.get('mode')||'solid',height:store.get('height')||5,float:store.get('float')??18,min:store.get('min')||0,frames:store.get('frames')||12,site:store.get('site')||66};
+$('height').value=st.height;$('heightv').textContent=st.height;$('float').value=st.float;$('floatv').textContent=st.float;$('min').value=st.min;$('minv').textContent=DBZ[st.min];$('frames').value=st.frames;
+let sites=[],site=null,frameTimes=[],cur=0,tiles=null;
+
+/* ---- tile geometry: which 4×4 block covers the radar, and how BoM's grid lines up with it ---- */
+function geom(s){
+  const n=2**Z,r=s.lat*Math.PI/180,fx=(s.lon+180)/360*n,fy=(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;
+  const x0=Math.floor(fx-N/2+0.5),y0=Math.floor(fy-N/2+0.5);
+  const span=WORLD/n,ox=(M8[0]+HALF)/span,oy=(HALF-M8[1])/span,xo=Math.round(ox),yo=Math.round(oy);
+  return{x0,y0,cx:(fx-x0)*256,cy:(fy-y0)*256,xo,yo,sx:(ox-xo)*256,sy:(oy-yo)*256,mpp:span/256*Math.cos(r)};
+}
+
+/* ================= scene ================= */
+const world=$('world');
+const view={rot:-15,tilt:58,scale:1};
+const planes=[];   // {el, imgs:[], lvl, z}
+function plane(cls){const el=document.createElement('div');el.className='plane '+cls;world.appendChild(el);return el}
+function build(){
+  world.innerHTML='';planes.length=0;
+  const g=geom(site);tiles=g;
+  const W=N*256,offX=-g.cx,offY=-g.cy;      // put the radar at the world's origin
+  // ground
+  const ground=plane('ground');ground.style.transform=`translate3d(${offX}px,${offY}px,0)`;
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const im=document.createElement('img');im.referrerPolicy='no-referrer';im.alt='';im.style.left=i*256+'px';im.style.top=j*256+'px';
+    im.src=BASEMAP(Z,g.y0+j,g.x0+i);im.onerror=()=>{im.style.visibility='hidden'};ground.appendChild(im)}
+  // range rings (100 / 200 km)
+  const rk=document.createElementNS('http://www.w3.org/2000/svg','svg');rk.setAttribute('class','ringsvg');rk.setAttribute('width',W);rk.setAttribute('height',W);
+  rk.style.left=offX+'px';rk.style.top=offY+'px';rk.style.position='absolute';
+  for(const km of[100,200]){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',g.cx);c.setAttribute('cy',g.cy);c.setAttribute('r',km*1000/g.mpp);
+    c.setAttribute('fill','none');c.setAttribute('stroke','#5ac8fa');c.setAttribute('stroke-opacity','.45');c.setAttribute('stroke-dasharray','6 6');c.setAttribute('stroke-width','1.3');rk.appendChild(c)}
+  const ringWrap=plane('rings');ringWrap.appendChild(rk);ringWrap.style.transform='translate3d(0,0,1px)';
+  // shadow + radar layers (level 0 = all rain, then one per stronger band)
+  const mk=(cls,lvl)=>{const el=plane(cls);const imgs=[];
+    for(let j=0;j<N;j++)for(let i=0;i<N;i++){const im=document.createElement('img');im.referrerPolicy='no-referrer';im.alt='';
+      const col=g.x0+i-g.xo,row=g.y0+j-g.yo;im.dataset.col=col;im.dataset.row=row;
+      im.style.left=(i*256+g.sx)+'px';im.style.top=(j*256+g.sy)+'px';im.onerror=()=>{im.style.visibility='hidden'};im.onload=()=>{im.style.visibility=''};
+      el.appendChild(im);imgs.push(im)}
+    if(lvl>0)el.style.filter=`url(#lv${lvl})`;
+    const p={el,imgs,lvl,offX,offY};planes.push(p);return p};
+  mk('shadowp',-1);
+  for(let lvl=0;lvl<BANDS.length;lvl++)mk('radar',lvl);
+  // radar marker
+  const m=document.createElement('div');m.className='mark';m.innerHTML=`<i></i><span class="tag">${site.name}</span>`;world.appendChild(m);planes.marker=m;
+  layout();showFrame(cur);
+}
+function tileURL(col,row,t){return`${WMTS}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${LAYER}&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible_BoM&TILEMATRIX=${Z}&TILEROW=${row}&TILECOL=${col}&time=${t}`}
+function layout(){
+  const h=st.height,f=st.float;
+  for(const p of planes){
+    let z,show=true;
+    if(p.lvl===-1){z=0.5;show=f>0&&st.mode!=='flat'}
+    else if(st.mode==='flat'){z=1+p.lvl*0.02;show=p.lvl===0}
+    else{show=p.lvl>=st.min;z=f+(p.lvl-st.min)*(st.mode==='sep'?h*2.2:h)}
+    p.el.style.display=show?'':'none';
+    p.el.style.transform=`translate3d(${p.offX}px,${p.offY}px,${z}px)`;
+  }
+  if(planes.marker){const top=st.mode==='flat'?2:f+(BANDS.length-st.min)*h+6;planes.marker.style.transform='translate3d(0,0,3px)';void top}
+  // in Solid mode, fill the gaps with in-between copies so the terraces look like blocks
+  world.querySelectorAll('.fillp').forEach(e=>e.remove());
+  if(st.mode==='solid'&&h>2){
+    const extra=h>=6?2:1;
+    for(const p of planes){if(p.lvl<st.min||p.lvl<0||p.lvl===BANDS.length-1)continue;
+      for(let e=1;e<=extra;e++){const c=p.el.cloneNode(true);c.classList.add('fillp');c.style.filter=p.el.style.filter||'';
+        c.style.transform=`translate3d(${p.offX}px,${p.offY}px,${st.float+(p.lvl-st.min)*h+e*h/(extra+1)}px)`;c.style.filter=(p.lvl>0?`url(#lv${p.lvl}) `:'')+'brightness(.78)';world.insertBefore(c,p.el.nextSibling)}}
+  }
+  camera();
+}
+function camera(){world.style.transform=`translateZ(-120px) rotateX(${view.tilt}deg) rotateZ(${view.rot}deg) scale3d(${view.scale},${view.scale},${view.scale})`}
+
+/* ---- frames ---- */
+async function latest(){
+  let t=Math.floor((Date.now()-8*60e3)/3e5)*3e5;
+  for(let k=0;k<10;k++){if(await probe(`${WMTS}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${LAYER}&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible_BoM&TILEMATRIX=0&TILEROW=0&TILECOL=0&time=${iso(new Date(t))}`))return t;t-=3e5}
+  return null;
+}
+const warm=new Set();
+function preload(t){if(!tiles||warm.has(t+'|'+site.id))return;warm.add(t+'|'+site.id);const g=tiles;
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const im=new Image();im.referrerPolicy='no-referrer';im.src=tileURL(g.x0+i-g.xo,g.y0+j-g.yo,iso(new Date(t)))}}
+function showFrame(i){
+  if(!frameTimes.length)return;cur=Math.max(0,Math.min(frameTimes.length-1,i));
+  const t=frameTimes[cur],ts=iso(new Date(t));
+  for(const p of planes)for(const im of p.imgs){const u=tileURL(+im.dataset.col,+im.dataset.row,ts);if(im.src!==u)im.src=u}
+  world.querySelectorAll('.fillp img').forEach(im=>{const u=tileURL(+im.dataset.col,+im.dataset.row,ts);if(im.src!==u)im.src=u});
+  $('time').max=frameTimes.length-1;$('time').value=cur;
+  const ago=Math.round((Date.now()-t)/6e4);
+  $('pclock').textContent=new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  $('pclock').classList.toggle('old',cur===frameTimes.length-1&&ago>25);
+  $('pago').textContent=cur===frameTimes.length-1?`${ago} min ago · latest`:`${ago} min ago`;
+}
+async function refresh(full){
+  if(full)status('Loading BoM radar…');
+  const t=await latest();
+  if(t===null){status("BoM's radar didn't load. Check your internet and tap Refresh.",true);return}
+  const atEnd=cur>=frameTimes.length-1;
+  frameTimes=[];for(let i=st.frames-1;i>=0;i--)frameTimes.push(t-i*3e5);
+  frameTimes.forEach(preload);
+  status(null);if(full||atEnd)showFrame(frameTimes.length-1);
+}
+let playing=false,pt=null;
+function step(){const last=cur===frameTimes.length-1;showFrame(last?0:cur+1);pt=setTimeout(step,cur===frameTimes.length-1?1400:550)}
+$('play').onclick=()=>{playing=!playing;$('play').setAttribute('aria-pressed',playing);$('play').textContent=playing?'Pause':'Play';clearTimeout(pt);if(playing)step()};
+$('prev').onclick=()=>showFrame(cur-1);$('next').onclick=()=>showFrame(cur+1);$('time').oninput=()=>showFrame(+$('time').value);
+
+/* ---- touch / mouse: drag to rotate and tilt, pinch or wheel to zoom ---- */
+const pts=new Map();let last=null,pinch0=null,spinOn=false;
+const v=$('view');
+v.addEventListener('pointerdown',e=>{v.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);v.classList.add('drag');$('hint').hidden=true;
+  if(spinOn){spinOn=false;$('spin').setAttribute('aria-pressed',false)}
+  if(pts.size===2){const[a,b]=[...pts.values()];pinch0={d:Math.hypot(a[0]-b[0],a[1]-b[1]),s:view.scale}}else last=[e.clientX,e.clientY]});
+v.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pts.size===2&&pinch0){const[a,b]=[...pts.values()];view.scale=Math.max(.35,Math.min(4,pinch0.s*Math.hypot(a[0]-b[0],a[1]-b[1])/pinch0.d));camera();return}
+  if(pts.size===1&&last){view.rot+=(e.clientX-last[0])*0.35;view.tilt=Math.max(0,Math.min(80,view.tilt-(e.clientY-last[1])*0.3));last=[e.clientX,e.clientY];camera()}});
+const up=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch0=null;if(pts.size===1)last=[...pts.values()][0];if(!pts.size){last=null;v.classList.remove('drag')}};
+v.addEventListener('pointerup',up);v.addEventListener('pointercancel',up);
+v.addEventListener('wheel',e=>{e.preventDefault();view.scale=Math.max(.35,Math.min(4,view.scale*Math.exp(-e.deltaY*0.0015)));camera()},{passive:false});
+function spin(){if(!spinOn)return;view.rot+=0.12;camera();requestAnimationFrame(spin)}
+$('spin').onclick=()=>{spinOn=!spinOn;$('spin').setAttribute('aria-pressed',spinOn);if(spinOn)spin()};
+function fit(){view.scale=Math.min(innerWidth/430,(innerHeight-250)/330,2.2);view.rot=-15;view.tilt=60;camera()}
+$('reset').onclick=fit;addEventListener('resize',fit);
+
+/* ---- controls ---- */
+function setMode(m){st.mode=m;store.set('mode',m);[['solid','mSolid'],['sep','mSep'],['flat','mFlat']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===m));layout();showFrame(cur)}
+$('mSolid').onclick=()=>setMode('solid');$('mSep').onclick=()=>setMode('sep');$('mFlat').onclick=()=>setMode('flat');
+let lt=null;const later=f=>{clearTimeout(lt);lt=setTimeout(f,80)};
+$('height').oninput=()=>{st.height=+$('height').value;$('heightv').textContent=st.height;store.set('height',st.height);later(()=>{layout();showFrame(cur)})};
+$('float').oninput=()=>{st.float=+$('float').value;$('floatv').textContent=st.float;store.set('float',st.float);later(()=>{layout();showFrame(cur)})};
+$('min').oninput=()=>{st.min=+$('min').value;$('minv').textContent=DBZ[st.min];store.set('min',st.min);later(()=>{layout();showFrame(cur)})};
+$('frames').onchange=()=>{st.frames=+$('frames').value;store.set('frames',st.frames);refresh(true)};
+$('refresh').onclick=()=>refresh(true);
+$('fold').onclick=()=>{const open=$('fold').getAttribute('aria-expanded')!=='true';$('fold').setAttribute('aria-expanded',open);$('fold').textContent=open?'Hide':'More';$('dockBody').hidden=!open};
+function selectSite(s){site=s;st.site=s.id;store.set('site',s.id);$('siteSel').value=s.id;
+  $('siteCode').textContent='IDR'+String(s.id).padStart(2,'0');$('siteName').textContent=s.name;build();frameTimes.forEach(preload);showFrame(cur)}
+$('siteSel').onchange=()=>{const s=sites.find(x=>String(x.id)===$('siteSel').value);if(s)selectSite(s)};
+$('locBtn').onclick=()=>{if(!navigator.geolocation){status('This browser cannot share your location.',true);return}status('Finding your location…');
+  navigator.geolocation.getCurrentPosition(p=>{const la=p.coords.latitude,lo=p.coords.longitude;
+    const near=sites.map(s=>[s,Math.hypot(s.lat-la,(s.lon-lo)*Math.cos(la*Math.PI/180))]).sort((a,b)=>a[1]-b[1])[0];status(null);if(near)selectSite(near[0])},
+  ()=>status('Location was not shared.',true),{timeout:10000})};
+
+/* ---- start ---- */
+(async()=>{
+  try{const list=await Archive.sites();sites=list.filter(s=>s.current).map(s=>({id:s.id,name:s.name,lat:s.lat,lon:s.lon,state:s.state}))}catch(e){}
+  if(!sites.length)sites=FALLBACK.map(([id,name,lat,lon])=>({id,name,lat,lon}));
+  const sel=$('siteSel');sel.innerHTML='';for(const s of sites){const o=document.createElement('option');o.value=s.id;o.textContent=s.name+(s.state?` · ${s.state}`:'');sel.appendChild(o)}
+  site=sites.find(s=>s.id===st.site)||sites.find(s=>s.id===66)||sites[0];
+  fit();setMode(st.mode);selectSite(site);
+  await refresh(true);
+  setInterval(()=>{if(!document.hidden)refresh(false)},120e3);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(false)});
+  setTimeout(()=>{$('hint').hidden=true},6000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161618">
+<title>RadixAus · Storm History</title>
+<meta name="description" content="Rebuild any past Australian storm in 3D from the Bureau of Meteorology radar archive.">
+<style>
+/* Layout: RadarScope-style. Solid site bar on top; full-bleed 3D view; bottom panel = product bar + colour strip + toolbar + time; settings fold out below. */
+:root{
+  --bg:#000; --bar:#161618; --panel:rgba(22,22,24,.96); --fill:#2c2c2e; --fill2:#3a3a3c; --line:#38383a;
+  --fg:#fff; --muted:#8e8e93; --accent:#bf5af2; --live:#ff453a; --warn:#ffd60a; --cc:#bf5af2; --vel:#ff6961;
+  --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.3 var(--ui);overflow:hidden;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+#scene{position:fixed;inset:0;touch-action:none;width:100%;height:100%;display:block}
+button,select,input{font-family:var(--ui)}
+/* top bar */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:2;background:var(--bar);border-bottom:1px solid var(--line);
+  padding-top:calc(8px + env(safe-area-inset-top,0px));padding-bottom:8px;
+  padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:space-between;align-items:center;gap:10px}
+.site{min-width:0}
+.siteline{font-size:1.22rem;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.siteline .code{color:var(--accent);font-weight:700}
+.sub{color:var(--muted);font-size:.86rem;font-weight:500;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub .hot{color:var(--live)}
+.hbtns{display:flex;gap:6px;flex:none}
+.pill{font:600 .8rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:9px;padding:8px 12px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.status{position:fixed;z-index:3;left:50%;transform:translateX(-50%);top:calc(70px + env(safe-area-inset-top,0px));
+  font:500 .78rem var(--ui);background:var(--panel);border-radius:10px;padding:8px 12px;max-width:calc(100% - 32px);text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.status.err{color:var(--warn)}
+/* sheets (storm picker, volume warning) */
+.sheet{position:fixed;z-index:4;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-bottom,0px));overflow-y:auto}
+.card{width:100%;max-width:440px;background:#1c1c1e;border-radius:16px;padding:18px 16px;display:grid;gap:14px}
+.card h2{margin:0;font-size:1.25rem;font-weight:700}
+.card h2 span{color:var(--accent)}
+.card p{margin:0;color:var(--muted);font-size:.86rem;line-height:1.45}
+.field{display:grid;gap:5px}
+.field label{color:var(--muted);font-size:.74rem;font-weight:500}
+.field select,.field input{font:500 1rem var(--ui);color:var(--fg);background:var(--fill);border:0;border-radius:10px;padding:11px 10px;width:100%;min-width:0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.go{font:600 1rem var(--ui);color:#000;background:var(--accent);border:0;border-radius:12px;padding:13px;cursor:pointer}
+.go:disabled{opacity:.35;cursor:default}
+.ghost{font:600 .92rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:12px;padding:12px;cursor:pointer}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.preset{display:grid;gap:2px;text-align:left;font:600 .86rem var(--ui);color:var(--fg);background:var(--fill);border:0;border-radius:11px;padding:10px 11px;cursor:pointer}
+.preset span{font:500 .72rem var(--ui);color:var(--muted)}
+.preset b{font-weight:600;color:var(--warn)}
+.preset[aria-pressed="true"]{outline:2px solid var(--accent)}
+.info{font:500 .82rem var(--ui);color:var(--muted);line-height:1.45}
+.info.err{color:var(--warn)}
+.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* bottom panel */
+.dock{position:fixed;z-index:2;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom,0px);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.dock-in{max-width:700px;margin:0 auto;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+.product{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;padding:9px 2px 6px}
+.pname{color:var(--accent);font-size:1.18rem;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psub{color:var(--muted);font-size:.82rem;font-weight:500;white-space:nowrap}
+.ptime{text-align:right;flex:none}
+.pclock{color:var(--accent);font-size:1.18rem;font-weight:600;font-variant-numeric:tabular-nums}
+.strip .scale{display:flex;height:9px;overflow:hidden;border-radius:1px}
+.strip .scale i{flex:1}
+.ticks{display:none;justify-content:space-between;font:500 .62rem var(--ui);color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+body[data-data="z"] .ticks[data-for="z"],body[data-data="v"] .ticks[data-for="v"],body[data-data="c"] .ticks[data-for="c"]{display:flex}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 6px;align-items:center}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;min-width:0;gap:2px}
+.seg.grow{flex:1}
+.seg.views{flex:1 1 100%}
+.seg.data{flex:1}
+.seg button{flex:1;font:600 .74rem var(--ui);color:var(--fg);background:transparent;border:0;border-radius:7px;padding:7px 6px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:#636366;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.seg button.vel[aria-pressed="true"]{background:#8a2a2a}
+.seg button.ccb[aria-pressed="true"]{background:#5b2d82}
+.seg button:disabled{opacity:.3;cursor:default}
+.fold{font:600 .74rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:9px;padding:8px 11px;cursor:pointer}
+.timebar{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:0 0 4px}
+.timebar button{font:600 .78rem var(--ui);color:var(--accent);background:var(--fill);border:0;border-radius:8px;padding:6px 10px;cursor:pointer;min-width:36px}
+.timebar button[aria-pressed="true"]{background:var(--accent);color:#000}
+.loadbar{display:flex;gap:2px;padding:2px 0 9px;height:15px}
+.loadbar i{flex:1;border-radius:2px;background:#2c2c2e}
+.loadbar i.dl{background:#24485a}.loadbar i.pr{background:#2f6f88}.loadbar i.ok{background:var(--accent)}.loadbar i.bad{background:var(--warn)}
+.loadbar i.cur{outline:1.5px solid #fff;outline-offset:1px}
+.dock-body{display:grid;gap:11px;padding:2px 0 12px;max-height:33vh;overflow-y:auto;border-top:1px solid var(--line);padding-top:10px}
+.row{display:grid;grid-template-columns:6.6rem 1fr 3.8rem;align-items:center;gap:8px;font-size:.8rem}
+.row label{color:var(--muted);font-size:.74rem;font-weight:500}
+.row output{font:500 .78rem var(--ui);text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chips .lbl{color:var(--muted);font-size:.74rem;font-weight:500;margin-right:2px}
+.chip{font:500 .76rem var(--ui);color:var(--fg);background:var(--fill);border:0;border-radius:8px;padding:6px 9px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.chip i{width:10px;height:10px;border-radius:3px;display:block}
+.chip[aria-pressed="false"]{opacity:.45}
+.chip[aria-pressed="true"].sel{background:var(--accent);color:#000}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.btns button{font:500 .76rem var(--ui);color:var(--fg);background:var(--fill);border:0;border-radius:8px;padding:7px 11px;cursor:pointer}
+.btns button[aria-pressed="true"]{background:var(--accent);color:#000}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.note{font-size:.7rem;color:var(--muted);line-height:1.45}
+.note.warnnote{color:var(--warn)}
+/* which controls show where */
+[data-views],.opac,#greyRow,.shellchips{display:none}
+body[data-view="radar"] [data-views~="radar"],body[data-view="tilts"] [data-views~="tilts"],body[data-view="blocks"] [data-views~="blocks"],body[data-view="shells"] [data-views~="shells"],body[data-view="volume"] [data-views~="volume"]{display:grid}
+body[data-view="radar"] .chips[data-views~="radar"],body[data-view="volume"] .chips[data-views~="volume"]{display:flex}
+body[data-view="radar"].raised .row.lift{display:grid}
+body[data-view="shells"][data-data="z"] #zChips,body[data-view="shells"][data-data="v"] #vChips,body[data-view="shells"][data-data="c"] #cChips,
+body.withshells[data-data="z"] #zChips,body.withshells[data-data="v"] #vChips,body.withshells[data-data="c"] #cChips{display:flex}
+body[data-view="shells"] #greyRow,body.withshells #greyRow{display:flex}
+body[data-view="shells"] .opac,body.withshells .opac{display:grid;gap:8px}
+.opac .row i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+body.picking #scene{cursor:crosshair}
+</style>
+</head>
+<body data-view="radar" data-data="z">
+<canvas id="scene"></canvas>
+<header class="topbar">
+  <div class="site">
+    <div class="siteline"><span class="code" id="siteCode"></span> <span id="siteName">RadixAus History</span></div>
+    <div class="sub" id="siteSub">Pick a radar and a date to rebuild a storm</div>
+  </div>
+  <div class="hbtns">
+    <button class="pill" id="openPicker">Storms</button>
+    <a class="pill" href="index.html">Live</a>
+  </div>
+</header>
+<div class="status" id="status" hidden></div>
+
+<!-- storm picker -->
+<div class="sheet" id="picker">
+  <div class="card">
+    <h2>Find a <span>storm</span></h2>
+    <p>Rebuild any past storm in 3D straight from the Bureau of Meteorology radar archive. The archive runs about 2 days behind.</p>
+    <div class="field"><label>Presets</label><div class="presets" id="presets"></div></div>
+    <div class="field"><label for="site">Radar</label><select id="site"><option>Loading radar list…</option></select></div>
+    <div class="field"><label for="date" id="dateLbl">Date (your local time)</label><input id="date" type="date" value="2025-10-26"></div>
+    <div class="field"><label>Times shown in</label><div class="seg" role="group" aria-label="Time zone"><button id="tzMine" aria-pressed="true">My time</button><button id="tzRadar" aria-pressed="false">Radar's local time</button></div></div>
+    <button class="go" id="find">Find scans</button>
+    <div class="info" id="findInfo" aria-live="polite"></div>
+    <div id="pick2" hidden style="display:grid;gap:14px">
+      <div id="pickFields" style="display:grid;gap:14px">
+      <div class="two">
+        <div class="field"><label for="from">From</label><select id="from"></select></div>
+        <div class="field"><label for="to">To</label><select id="to"></select></div>
+      </div>
+      <div class="two">
+        <div class="field"><label for="every">Every</label><select id="every"><option value="0">Every scan</option><option value="10" selected>10 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 hour</option></select></div>
+        <div class="field"><label for="area">Area</label><select id="area"><option value="wide">Whole radar · 240 km</option><option value="close">Close-up · 120 km</option></select></div>
+      </div>
+      </div>
+      <div class="info" id="sizeInfo"></div>
+      <button class="go" id="build">Build storm</button>
+    </div>
+    <button class="ghost" id="closePicker" hidden>Back to the storm</button>
+  </div>
+</div>
+
+<!-- volume warning -->
+<div class="sheet" id="volWarn" hidden>
+  <div class="card">
+    <h2>Volume <span>render</span></h2>
+    <p>Volume render draws the whole storm as glowing, see-through fog, like GR2Analyst. It works the graphics chip hard: on older phones (roughly iPhone 11 or earlier, or budget Android phones) it can stutter, drain battery or make the phone warm.</p>
+    <p>If it stutters, switch Quality to Low in Controls. The app will also lower it by itself if things get too slow.</p>
+    <div class="btnrow"><button class="ghost" id="vwLow">Start on Low</button><button class="go" id="vwMed">Medium is fine</button></div>
+  </div>
+</div>
+
+<div class="dock">
+ <div class="dock-in">
+  <div class="product">
+    <div style="min-width:0"><div class="pname" id="pname">Super-Res Reflectivity</div><div class="psub" id="psub">Elevation = 0.5°</div></div>
+    <div class="ptime"><div class="pclock" id="pclock">–</div><div class="psub" id="pdate"></div></div>
+  </div>
+  <div class="strip">
+    <div class="scale" id="scale"></div>
+    <div class="ticks" data-for="z"><span>15</span><span>25</span><span>35</span><span>45</span><span>55</span><span>65</span><span>75 dBZ</span></div>
+    <div class="ticks" data-for="v"><span>35 toward</span><span>15</span><span>0</span><span>15</span><span>35 m/s away</span></div>
+    <div class="ticks" data-for="c"><span>0.2</span><span>0.5</span><span>0.8</span><span>0.9</span><span>0.95</span><span>1.0 CC</span></div>
+  </div>
+  <div class="toolbar">
+    <div class="seg views" role="group" aria-label="View">
+      <button id="vRadar" aria-pressed="true">Radar</button>
+      <button id="vTilts" aria-pressed="false">Tilts</button>
+      <button id="vBlocks" aria-pressed="false">Blocks</button>
+      <button id="vShells" aria-pressed="false">Shells</button>
+      <button id="vVolume" aria-pressed="false">Volume</button>
+    </div>
+    <div class="seg data" role="group" aria-label="Data">
+      <button id="dZ" aria-pressed="true">dBZ</button>
+      <button id="dV" class="vel" aria-pressed="false">Vel</button>
+      <button id="dC" class="ccb" aria-pressed="false">CC</button>
+    </div>
+    <button class="fold" id="fold" aria-expanded="false">Controls</button>
+  </div>
+  <div class="timebar">
+    <button id="prev" aria-label="Previous scan">◀</button>
+    <input id="time" type="range" min="0" max="0" value="0" aria-label="Scan time">
+    <button id="next" aria-label="Next scan">▶</button>
+    <button id="play" aria-pressed="false">Play</button>
+  </div>
+  <div class="loadbar" id="loadbar" aria-hidden="true"></div>
+  <div class="dock-body" id="dockBody" hidden>
+    <div class="chips" data-views="radar"><span class="lbl">Overlay</span><button class="chip" id="raise" aria-pressed="false">Raise 3D storm</button></div>
+    <div class="chips" data-views="volume"><span class="lbl">Quality</span><button class="chip sel" id="qLow" aria-pressed="false">Low</button><button class="chip sel" id="qMed" aria-pressed="true">Medium</button><button class="chip sel" id="qHigh" aria-pressed="false">High</button></div>
+    <div class="row" data-views="volume"><label for="vOp">Fog density</label><input id="vOp" type="range" min="10" max="100" value="40"><output id="vOpv">40%</output></div>
+    <div class="row" data-views="volume"><label for="vMin" id="vMinLbl">Glow from</label><input id="vMin" type="range" min="10" max="60" value="25"><output id="vMinv">25</output></div>
+    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button></div>
+    <div class="note warnnote" data-views="volume">Volume render is heavy on older phones. If it stutters, pick Low.</div>
+    <div class="chips shellchips" id="zChips"><span class="lbl">dBZ shells</span></div>
+    <div class="chips shellchips" id="vChips"><span class="lbl">Wind shells</span></div>
+    <div class="chips shellchips" id="cChips"><span class="lbl">Low-CC shells</span></div>
+    <div class="opac" id="opac"></div>
+    <div class="chips" id="greyRow"><span class="lbl">Look</span><button class="chip" id="grey" aria-pressed="false">Cloud look</button><button class="chip" id="opReset">Reset see-through</button></div>
+    <div class="row" data-views="tilts blocks"><label for="min" id="minLbl">Min dBZ</label><input id="min" type="range" min="10" max="70" value="25"><output id="minv">25</output></div>
+    <div class="row" data-views="tilts"><label for="spread">Spread tilts</label><input id="spread" type="range" min="0" max="6" step="0.5" value="0"><output id="spreadv">0</output></div>
+    <div class="row" data-views="radar"><label for="radarOp">Radar opacity</label><input id="radarOp" type="range" min="10" max="100" value="90"><output id="radarOpv">90%</output></div>
+    <div class="row lift" data-views="tilts blocks shells volume"><label for="lift">Lift off map</label><input id="lift" type="range" min="0" max="40" step="1" value="0"><output id="liftv">0 km</output></div>
+    <div class="row"><label for="exag">Height ×</label><input id="exag" type="range" min="1" max="5" step="0.5" value="2.5"><output id="exagv">2.5</output></div>
+    <div class="row" data-views="tilts blocks shells volume"><label for="cut">Cut away</label><input id="cut" type="range" min="-150" max="150" value="-150"><output id="cutv">off</output></div>
+    <div class="chips" id="satRow"><span class="lbl">Satellite</span><button class="chip sel" id="satToday" aria-pressed="true">Today</button><button class="chip sel" id="satBefore" aria-pressed="false">Before</button><button class="chip sel" id="satAfter" aria-pressed="false">After</button><button class="chip sel" id="satSweep" aria-pressed="false">Storm sweep</button><button class="chip sel" id="satDmg" aria-pressed="false">Damage overlay</button></div>
+    <div class="chips" id="sweepBy" hidden><span class="lbl">Sweep by</span><button class="chip sel" id="byCore" aria-pressed="true">Core (reflectivity)</button><button class="chip sel" id="byVel" aria-pressed="false">Velocity intensity</button></div>
+    <div class="row" id="sweepRow" hidden><label for="sweepTh">Core from</label><input id="sweepTh" type="range" min="30" max="60" value="45"><output id="sweepThv">45 dBZ</output></div>
+    <div class="row" id="velRow" hidden><label for="velTh">Wind from</label><input id="velTh" type="range" min="10" max="40" value="20"><output id="velThv">20 m/s</output></div>
+    <div class="note" id="satInfo" aria-live="polite"></div>
+    <div class="btns">
+      <button id="namesBtn" aria-pressed="true">Town names</button>
+      <button id="mapBtn" hidden>Dark map</button>
+      <button id="focusBtn" aria-pressed="false">Pick close-up centre</button>
+      <button id="spin" aria-pressed="false">Auto-rotate</button>
+      <button id="reset">Reset view</button>
+    </div>
+    <div class="note">Velocity is wind toward (green) or away from (red) the radar. CC near 1 (dark red) is plain rain; lower CC inside a strong storm usually means large hail, and a low-CC blob on a rotation couplet is the classic tornado debris signature. CC only exists on dual-pol radars. Heights are stretched ×2.5 by default.<br>Unofficial and not endorsed by BoM; not for safety decisions. Radar data: Australian Unified Radar Archive, Bureau of Meteorology, © Commonwealth of Australia, licensed under CC BY 4.0, hosted by NCI Australia; regridded and drawn in 3D by Team Twister. Map imagery © Esri and its partners. Before/after satellite: NASA HLS (Copernicus Sentinel-2, USGS/NASA Landsat) and OPERA disturbance alerts, via NASA GIBS. Built by Team Twister. <a href="about.html" style="color:var(--accent)">Full disclaimer and credits</a>.</div>
+  </div>
+ </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="archive.js"></script>
+<script>
+/* ================= colours ================= */
+const ZST=[[10,[120,130,140]],[15,[92,157,174]],[20,[39,169,67]],[25,[24,131,35]],[30,[35,115,8]],[33,[155,191,3]],[35,[244,243,0]],[40,[204,188,0]],[41,[238,138,1]],[49,[196,104,8]],[50,[249,35,11]],[58,[148,39,28]],[60,[200,133,169]],[65,[196,67,134]],[66,[154,36,224]],[72,[105,24,179]],[76,[230,230,255]]];
+const VST=[[-35,[200,255,200]],[-25,[0,255,60]],[-12,[0,150,40]],[-3,[60,90,65]],[0,[110,110,110]],[3,[95,60,60]],[12,[170,0,20]],[25,[255,30,60]],[35,[255,200,170]]];
+const CST=[[0.2,[20,20,60]],[0.45,[60,60,200]],[0.6,[0,160,255]],[0.75,[0,220,160]],[0.85,[160,255,0]],[0.9,[255,255,0]],[0.93,[255,176,0]],[0.96,[255,80,0]],[0.98,[200,0,30]],[1.0,[130,0,40]],[1.05,[255,220,240]]];
+function ramp(st,z){if(z<=st[0][0])return st[0][1];for(let i=1;i<st.length;i++){const[a,ca]=st[i-1],[b,cb]=st[i];if(z<=b){const t=(z-a)/(b-a);return ca.map((v,k)=>v+(cb[k]-v)*t)}}return st.at(-1)[1]}
+const RAMP={z:ZST,v:VST,c:CST};
+const DEC={z:q=>q-32,v:q=>q-64,c:q=>q/200};
+// 256-entry colour tables per field (index = stored byte)
+const LUTC={};for(const k of['z','v','c']){const t=new Uint8Array(256*4);for(let q=1;q<256;q++){const[r,g,b]=ramp(RAMP[k],DEC[k](q));t.set([r,g,b,255],q*4)}LUTC[k]=t}
+LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
+
+const $=id=>document.getElementById(id);
+function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
+const st={volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+  op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
+  on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
+const SHELLS={
+  z:[['20','20+ dBZ',0x3fb878,'z20'],['40','40+ dBZ',0xf2d20a,'z40'],['50','50+ dBZ',0xf2400f,'z50'],['60','60+ dBZ',0xd56ad6,'z60']],
+  v:[['in15','Toward 15+',0x1fbf55,'in15'],['in25','Toward 25+',0x6dff8a,'in25'],['out15','Away 15+',0xc8102e,'out15'],['out25','Away 25+',0xff4d6a,'out25']],
+  c:[['cc90','CC < 0.90',0xc58cff,'cc90'],['cc80','CC < 0.80',0x5a2cff,'cc80']]};
+const OP_DEFAULT=JSON.parse(JSON.stringify(st.op));
+
+/* ================= scene ================= */
+const canvas=$('scene');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.localClippingEnabled=true;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x05080c);scene.fog=new THREE.Fog(0x05080c,350,800);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,4000);
+const controls=new THREE.OrbitControls(camera,canvas);controls.enableDamping=true;controls.maxPolarAngle=Math.PI*0.49;controls.minDistance=8;controls.maxDistance=650;controls.autoRotateSpeed=1;
+scene.add(new THREE.HemisphereLight(0xdbe9ff,0x20180c,0.8));
+const sun=new THREE.DirectionalLight(0xffffff,0.75);sun.position.set(-80,120,60);scene.add(sun);
+const clip=new THREE.Plane(new THREE.Vector3(1,0,0),150);
+const world=new THREE.Group();scene.add(world);
+const storm=new THREE.Group();world.add(storm);
+let ground=null,satMesh=null,labelMesh=null,darkGround=null,LABELS=[];
+function label(text,x,z,color){
+  const c=document.createElement('canvas'),ctx=c.getContext('2d'),fs=40,font=`600 ${fs}px IBM Plex Sans, system-ui, sans-serif`;ctx.font=font;
+  const w=Math.ceil(ctx.measureText(text).width)+24;c.width=w;c.height=fs+20;
+  ctx.font=font;ctx.fillStyle='rgba(5,8,12,.7)';ctx.fillRect(0,0,w,c.height);ctx.fillStyle=color;ctx.textBaseline='middle';ctx.fillText(text,12,c.height/2);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false,transparent:true,fog:false}));
+  sp.userData.aspect=w/c.height;sp.position.set(x,3.2,z);sp.renderOrder=10;LABELS.push(sp);return sp;
+}
+function disposeTree(o){o.traverse(n=>{if(n.geometry)n.geometry.dispose();if(n.material){[].concat(n.material).forEach(m=>{if(m.map)m.map.dispose();m.dispose()})}})}
+
+/* ================= sky follows the time of the scan =================
+   Works out where the sun was over the radar at the moment of the scan you're looking at, and colours the sky, the haze and
+   the lighting to match: blue by day, gold and orange around sunrise and sunset, deep blue at dusk, dark at night. During
+   playback it changes frame by frame. */
+function sunPos(ms,lat,lon){const r=Math.PI/180,d=ms/864e5-10957.5,g=(357.529+0.98560028*d)*r,q=280.459+0.98564736*d;
+  const L=(q+1.915*Math.sin(g)+0.020*Math.sin(2*g))*r,e=(23.439-0.00000036*d)*r;
+  const ra=Math.atan2(Math.cos(e)*Math.sin(L),Math.cos(L)),dec=Math.asin(Math.sin(e)*Math.sin(L));
+  const gmst=((18.697374558+24.06570982441908*d)%24+24)%24,ha=(gmst*15+lon)*r-ra,la=lat*r;
+  const el=Math.asin(Math.sin(la)*Math.sin(dec)+Math.cos(la)*Math.cos(dec)*Math.cos(ha));
+  const az=Math.atan2(-Math.sin(ha),Math.tan(dec)*Math.cos(la)-Math.sin(la)*Math.cos(ha));   // from north, clockwise
+  return{el:el/r,az}}
+// [sun height°, sky top, horizon, sunlight colour, sunlight strength, sky light strength, map brightness]
+const SKYK=[[-18,'#02040a','#060a13','#000000',0,0.34,0.32],[-8,'#06102a','#1b2346','#3a4a80',0.04,0.42,0.42],[-2,'#14295a','#7a4a62','#ff8a5a',0.2,0.5,0.55],
+  [2,'#24497f','#f08a4a','#ff9a5a',0.5,0.6,0.7],[9,'#3a6cb0','#f3c48e','#ffc890',0.72,0.72,0.86],[25,'#2a66b4','#a8c9ea','#fff4e2',0.85,0.8,1]];
+// satellite map brightness: the same as the 2D view in every 3D view (it used to be darkened a lot in 3D, especially Volume),
+// only dimmed for dusk and night
+const groundLevel=()=>Math.max(0.5,SKY.ground??1)*(st.view==='volume'&&!st.grey?0.85:1);
+const SKY={dir:new THREE.Vector3(-0.5,0.7,0.4).normalize(),key:''};
+const hemi=scene.children.find(o=>o.isHemisphereLight);
+const skyCanvas=document.createElement('canvas');skyCanvas.width=2;skyCanvas.height=256;const skyTex=new THREE.CanvasTexture(skyCanvas);
+function applySky(ms,site){
+  if(!ms||!site)return;const k=Math.round(ms/6e4)+'|'+site.id;if(k===SKY.key)return;SKY.key=k;
+  const{el,az}=sunPos(ms,site.lat,site.lon);
+  let i=0;while(i<SKYK.length-2&&el>SKYK[i+1][0])i++;const A=SKYK[i],B=SKYK[i+1],t=Math.max(0,Math.min(1,(el-A[0])/(B[0]-A[0])));
+  const mix=(a,b)=>new THREE.Color(a).lerp(new THREE.Color(b),t),num=(a,b)=>a+(b-a)*t;
+  const top=mix(A[1],B[1]),hor=mix(A[2],B[2]),sc=mix(A[3],B[3]),si=num(A[4],B[4]),hi=num(A[5],B[5]),gb=num(A[6],B[6]);
+  const ctx=skyCanvas.getContext('2d'),gr=ctx.createLinearGradient(0,0,0,256);gr.addColorStop(0,'#'+top.getHexString());gr.addColorStop(0.62,'#'+hor.getHexString());gr.addColorStop(1,'#'+hor.clone().multiplyScalar(0.8).getHexString());
+  ctx.fillStyle=gr;ctx.fillRect(0,0,2,256);skyTex.needsUpdate=true;scene.background=skyTex;scene.fog.color.copy(hor).multiplyScalar(0.85);
+  const e=Math.max(el,6)*Math.PI/180;SKY.dir.set(Math.sin(az)*Math.cos(e),Math.sin(e),-Math.cos(az)*Math.cos(e)).normalize();
+  sun.position.copy(SKY.dir).multiplyScalar(200);sun.color.copy(sc);sun.intensity=si;
+  if(hemi){hemi.color.copy(top).lerp(new THREE.Color(0xdbe9ff),0.55);hemi.intensity=hi}
+  SKY.ground=gb;if(satMesh)satMesh.material.color.setScalar(groundLevel());
+  volMat.uniforms.uSunCol.value.copy(sc).multiplyScalar(Math.max(si,0.05)*1.2);
+  volMat.uniforms.uSky.value.copy(top).lerp(hor,0.5).lerp(new THREE.Color(0x8a96a8),0.35).multiplyScalar(0.6+hi*0.6);
+  {const k=volMat.uniforms.uSky.value;k.r=Math.max(k.r,0.2);k.g=Math.max(k.g,0.22);k.b=Math.max(k.b,0.3)}   // moonlight: clouds stay visible at night
+}
+
+/* ground: satellite imagery + place names (Esri), range rings, radar marker. Built per radar. */
+let groundToken=0;
+function buildGround(site,R){
+  const token=++groundToken;
+  if(ground){world.remove(ground);disposeTree(ground)}
+  LABELS=[];satMesh=labelMesh=null;
+  ground=new THREE.Group();world.add(ground);
+  darkGround=new THREE.Mesh(new THREE.CircleGeometry(R,96),new THREE.MeshBasicMaterial({color:0x0d1620,fog:false}));
+  darkGround.rotation.x=-Math.PI/2;darkGround.position.y=-0.05;ground.add(darkGround);
+  for(const r of [25,50,75,100,125,150]){if(r>R)break;const p=[];for(let a=0;a<=160;a++){const t=a/160*Math.PI*2;p.push(new THREE.Vector3(Math.sin(t)*r,0.3,-Math.cos(t)*r))}
+    ground.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),new THREE.LineBasicMaterial({color:0x4fd2e8,transparent:true,opacity:.3,fog:false})))}
+  const radar=new THREE.Mesh(new THREE.ConeGeometry(0.9,2.4,4),new THREE.MeshBasicMaterial({color:0xff5a5a}));radar.position.set(0,1.2,0);ground.add(radar);
+  ground.add(label(`${site.name} radar`,0,0,'#ff8a8a'));
+  const lat0=site.lat,lon0=site.lon,KX=111.32*Math.cos(lat0*Math.PI/180),KY=110.57;
+  const Z=R>95?9:10,n=2**Z;
+  const tileOf=(lon,lat)=>{const r=lat*Math.PI/180;return[(lon+180)/360*n,(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n]};
+  const lonlatOf=(tx,ty)=>[tx/n*360-180,Math.atan(Math.sinh(Math.PI*(1-2*ty/n)))*180/Math.PI];
+  const[ax,ay]=tileOf(lon0-R/KX,lat0+R/KY),[bx,by]=tileOf(lon0+R/KX,lat0-R/KY);
+  const tx0=Math.floor(ax),ty0=Math.floor(ay),nx=Math.floor(bx)-tx0+1,ny=Math.floor(by)-ty0+1;
+  const mosaic=async(service,fill)=>{const cv=document.createElement('canvas');cv.width=nx*256;cv.height=ny*256;const ctx=cv.getContext('2d');
+    if(fill){ctx.fillStyle=fill;ctx.fillRect(0,0,cv.width,cv.height)}let ok=0;const jobs=[];
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++)jobs.push(new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';
+      im.onload=()=>{ctx.drawImage(im,i*256,j*256);ok++;res()};im.onerror=()=>res();
+      im.src=`https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/${Z}/${ty0+j}/${tx0+i}`}));
+    await Promise.all(jobs);return ok?cv:null};
+  const surface=(cv,y,transparent)=>{const tex=new THREE.CanvasTexture(cv);tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+    const seg=48,geo=new THREE.PlaneGeometry(1,1,seg,seg),pos=geo.attributes.position,uv=geo.attributes.uv;
+    for(let k=0;k<pos.count;k++){const u=uv.getX(k),v=uv.getY(k);const[lon,lat]=lonlatOf(tx0+u*nx,ty0+(1-v)*ny);pos.setXYZ(k,(lon-lon0)*KX,y,-(lat-lat0)*KY)}
+    pos.needsUpdate=true;geo.computeBoundingSphere();
+    return new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide,fog:false,transparent,depthWrite:!transparent}))};
+  (async()=>{
+    const img=await mosaic('World_Imagery','#0d1620');if(token!==groundToken)return;
+    if(img){satMesh=surface(img,0,false);ground.add(satMesh);$('mapBtn').hidden=false}
+    const lab=await mosaic('Reference/World_Boundaries_and_Places',null);if(token!==groundToken)return;
+    if(lab){labelMesh=surface(lab,0.25,true);labelMesh.renderOrder=3;ground.add(labelMesh)}
+    applyMap();
+  })();
+  applyMap();
+}
+function applyMap(){if(satMesh)satMesh.visible=st.sat;if(darkGround)darkGround.visible=!(satMesh&&st.sat);if(labelMesh)labelMesh.visible=st.names;
+  for(const sp of LABELS)sp.visible=true;$('mapBtn').textContent=st.sat?'Dark map':'Satellite map'}
+
+/* ================= dated satellite: before / after / storm sweep (NASA HLS = Sentinel-2 + Landsat) =================
+   Before: the clearest pictures from up to ~2 weeks before the storm (the morning pass on the storm day counts, since it's
+   taken before the afternoon storms). After: the clearest from the days after. Several passes are stitched together, newest
+   clear picture first, skipping cloud and the edges of each satellite's strip. Storm sweep: the ground shows "before" until the
+   storm's core passes over it, then switches to "after", so the damage appears behind the storm during the replay.
+   Damage overlay: NASA's vegetation-disturbance alerts (OPERA DIST), made from the same satellites, on top. */
+const GIBS='https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
+const HLS_LAYERS=[['HLS_S30_Nadir_BRDF_Adjusted_Reflectance','Sentinel-2'],['HLS_L30_Nadir_BRDF_Adjusted_Reflectance','Landsat']];
+const DIST_LAYER='OPERA_L3_DIST-ALERT-HLS_Color_Index';
+const SAT={mode:'today',dmg:false,th:45,byCore:true,byVel:false,vth:20,tok:0,grid:null,before:null,after:null,beforeInfo:null,afterInfo:null,distCv:null,mesh:null,distMesh:null,maskTex:null,loading:null};
+const ymdUTC=ms=>new Date(ms).toISOString().slice(0,10);
+function satGrid(){const s=session.site,o=session.opt,lat0=s.lat,lon0=s.lon,KX=111.32*Math.cos(lat0*Math.PI/180),KY=110.57;
+  const half=o.half+12,cx=o.cx||0,cy=o.cy||0,Z=o.half<100?11:10,n=2**Z;
+  const tileOf=(lon,lat)=>{const r=lat*Math.PI/180;return[(lon+180)/360*n,(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n]};
+  const[ax,ay]=tileOf(lon0+(cx-half)/KX,lat0+(cy+half)/KY),[bx,by]=tileOf(lon0+(cx+half)/KX,lat0+(cy-half)/KY);
+  const tx0=Math.floor(ax),ty0=Math.floor(ay);
+  return{Z,n,tx0,ty0,nx:Math.floor(bx)-tx0+1,ny:Math.floor(by)-ty0+1,lat0,lon0,KX,KY,
+    lonlatOf:(tx,ty)=>[tx/n*360-180,Math.atan(Math.sinh(Math.PI*(1-2*ty/n)))*180/Math.PI]}}
+function satTiles(g,url){const cv=document.createElement('canvas');cv.width=g.nx*256;cv.height=g.ny*256;const ctx=cv.getContext('2d');let ok=0,i=0;
+  const jobs=[];for(let j=0;j<g.ny;j++)for(let k=0;k<g.nx;k++)jobs.push([k,j]);
+  const worker=async()=>{while(i<jobs.length){const[k,j]=jobs[i++];await new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';
+    im.onload=()=>{ctx.drawImage(im,k*256,j*256);ok++;res()};im.onerror=()=>res();im.src=url(g.Z,g.ty0+j,g.tx0+k)})}};
+  return Promise.all(Array.from({length:8},worker)).then(()=>ok?cv:null)}
+// how much of the area a pass actually covers clear of cloud, from a small low-res copy (cheap to download)
+function clearShare(d){const p=d.data;let good=0,n=p.length/4;for(let k=0;k<p.length;k+=4){if(p[k+3]<200)continue;const r=p[k],g=p[k+1],b=p[k+2];if(r+g+b<20)continue;
+  const mn=Math.min(r,g,b),mx=Math.max(r,g,b);if(mn>165&&mx-mn<40)continue;good++}return good/n}
+async function rankDates(g,dates,tok){const small={...g},f=2**(g.Z-8);small.Z=8;small.n=256;small.tx0=Math.floor(g.tx0/f);small.ty0=Math.floor(g.ty0/f);
+  small.nx=Math.floor((g.tx0+g.nx-1)/f)-small.tx0+1;small.ny=Math.floor((g.ty0+g.ny-1)/f)-small.ty0+1;
+  const out=[];
+  for(const d of dates)for(const[layer,name]of HLS_LAYERS){if(tok!==SAT.tok)return[];
+    const cv=await satTiles(small,(z,y,x)=>`${GIBS}${layer}/default/${d}/GoogleMapsCompatible_Level12/${z}/${y}/${x}.png`);
+    if(!cv)continue;const s=clearShare(cv.getContext('2d').getImageData(0,0,cv.width,cv.height));if(s>0.04)out.push({d,layer,name,s})}
+  return out}
+// stitch passes together: each pixel takes the first clear picture in preference order
+async function composite(g,cands,tok,label){const W=g.nx*256,H=g.ny*256,res=new ImageData(W,H),R=res.data,total=W*H;let filled=0;const used=[];
+  for(const c of cands){if(tok!==SAT.tok||filled/total>0.97||used.length>=6)break;
+    satInfo(`${label}: adding ${c.name} ${fmtDay(c.d)}… (${Math.round(filled/total*100)}% done)`);
+    const cv=await satTiles(g,(z,y,x)=>`${GIBS}${c.layer}/default/${c.d}/GoogleMapsCompatible_Level12/${z}/${y}/${x}.png`);if(!cv)continue;
+    let d;try{d=cv.getContext('2d').getImageData(0,0,W,H).data}catch(e){continue}
+    let add=0;for(let p=0,k=0;p<total;p++,k+=4){if(R[k+3])continue;const a=d[k+3],r=d[k],gg=d[k+1],b=d[k+2];if(a<200||r+gg+b<20)continue;
+      const mn=Math.min(r,gg,b),mx=Math.max(r,gg,b);if(mn>165&&mx-mn<40)continue;R[k]=r;R[k+1]=gg;R[k+2]=b;R[k+3]=255;add++}
+    if(add>total*0.005){filled+=add;used.push(c)}}
+  const out=document.createElement('canvas');out.width=W;out.height=H;out.getContext('2d').putImageData(res,0,0);
+  return{cv:out,share:filled/total,used}}
+const fmtDay=d=>new Date(d+'T12:00:00Z').toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'UTC'});
+function satInfo(t){$('satInfo').textContent=t||''}
+function satGeo(g,y){const seg=48,geo=new THREE.PlaneGeometry(1,1,seg,seg),pos=geo.attributes.position,uv=geo.attributes.uv;
+  for(let k=0;k<pos.count;k++){const u=uv.getX(k),v=uv.getY(k);const[lon,lat]=g.lonlatOf(g.tx0+u*g.nx,g.ty0+(1-v)*g.ny);pos.setXYZ(k,(lon-g.lon0)*g.KX,y,-(lat-g.lat0)*g.KY)}
+  pos.needsUpdate=true;geo.computeBoundingSphere();return geo}
+/* two layers, like your idea: the After picture underneath, the Before picture on top, and the storm sweep erases the Before
+   picture (stronger = more fully erased). Both are pulled toward the camera so today's map can never flicker through. */
+const satAfterMat=new THREE.ShaderMaterial({
+  uniforms:{uT:{value:null},uBright:{value:1}},
+  vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform sampler2D uT;uniform float uBright;varying vec2 vUv;
+void main(){vec4 c=texture2D(uT,vUv);if(c.a<0.5)discard;gl_FragColor=vec4(c.rgb*uBright,1.0);}`,
+  side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+const satMat=new THREE.ShaderMaterial({   // the Before picture, with the eraser
+  uniforms:{uA:{value:null},uMask:{value:null},uSweep:{value:0},uGrid:{value:new THREE.Vector4(0,0,1,1)},uBright:{value:1}},
+  vertexShader:`varying vec2 vUv;varying vec2 vXZ;void main(){vUv=uv;vXZ=position.xz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform sampler2D uA;uniform sampler2D uMask;uniform float uSweep;uniform vec4 uGrid;uniform float uBright;varying vec2 vUv;varying vec2 vXZ;
+void main(){vec4 a=texture2D(uA,vUv);float m=0.0;
+  if(uSweep>0.5){vec2 g=vec2((vXZ.x-uGrid.x)/uGrid.z,(-vXZ.y-uGrid.y)/uGrid.w);if(g.x>0.0&&g.y>0.0&&g.x<1.0&&g.y<1.0)m=texture2D(uMask,g).r;}
+  float al=step(0.5,a.a)*(1.0-m);if(al<0.01)discard;   // erased (or no picture here): the After map shows through
+  gl_FragColor=vec4(a.rgb*uBright,al);}`,
+  side:THREE.DoubleSide,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-8});
+function satDrop(){for(const k of['mesh','mesh2','distMesh']){if(SAT[k]){if(ground)ground.remove(SAT[k]);SAT[k].geometry.dispose();SAT[k]=null}}}
+function satReset(){SAT.tok++;satDrop();for(const k of['before','after'])if(SAT[k]){SAT[k].tex.dispose();SAT[k]=null}if(SAT.distTex){SAT.distTex.dispose();SAT.distTex=null}SAT.loading=null;SAT.grid=null;
+  if(SAT.mode!=='today'||SAT.dmg)satEnsure()}
+// load what the chosen mode needs (once per storm), then show it
+async function satEnsure(){
+  if(!session){satInfo('Build a storm first.');return}
+  if(SAT.loading)return SAT.loading;
+  const tok=SAT.tok;
+  SAT.loading=(async()=>{
+    const g=SAT.grid=SAT.grid||satGrid(),day=ymdUTC(session.list[0].time),D=Date.parse(day+'T00:00:00Z');
+    const need=[];if(SAT.mode==='before'||SAT.mode==='sweep')need.push('before');if(SAT.mode==='after'||SAT.mode==='sweep'||SAT.dmg)need.push('after');
+    for(const side of need){if(SAT[side])continue;
+      const dates=side==='before'?Array.from({length:17},(_,i)=>ymdUTC(D-i*864e5)):Array.from({length:21},(_,i)=>ymdUTC(D+(i+1)*864e5));
+      satInfo(`${side==='before'?'Before':'After'}: checking which NASA passes are clear…`);
+      const ranked=await rankDates(g,dates,tok);if(tok!==SAT.tok)return;
+      if(!ranked.length){satInfo(`No clear ${side} pictures found within ${side==='before'?'2 weeks before':'3 weeks after'} the storm (cloud, or NASA has nothing for here yet).`);SAT[side]={tex:null,used:[],share:0};continue}
+      // closest to the storm first, but skip passes that are mostly cloud
+      ranked.sort((a,b)=>side==='before'?(b.d.localeCompare(a.d)||b.s-a.s):(a.d.localeCompare(b.d)||b.s-a.s));
+      const c=await composite(g,ranked.filter(r=>r.s>0.15).concat(ranked.filter(r=>r.s<=0.15)),tok,side==='before'?'Before':'After');if(tok!==SAT.tok)return;
+      const tex=new THREE.CanvasTexture(c.cv);tex.anisotropy=renderer.capabilities.getMaxAnisotropy();SAT[side]={tex,used:c.used,share:c.share}}
+    if(SAT.dmg&&!SAT.distTex&&SAT.after&&SAT.after.used.length){satInfo('Damage overlay: loading NASA disturbance alerts…');
+      const cv=document.createElement('canvas');cv.width=g.nx*256;cv.height=g.ny*256;const ctx=cv.getContext('2d');
+      const last=SAT.after.used.map(u=>u.d).sort().slice(-1)[0],more=ymdUTC(Date.parse(last+'T00:00:00Z')+10*864e5);
+      for(const d of [...new Set([...SAT.after.used.map(u=>u.d),more])]){if(tok!==SAT.tok)return;const t=await satTiles(g,(z,y,x)=>`${GIBS}${DIST_LAYER}/default/${d}/GoogleMapsCompatible_Level12/${z}/${y}/${x}.png`);if(t)ctx.drawImage(t,0,0)}
+      SAT.distTex=new THREE.CanvasTexture(cv)}
+  })().finally(()=>{SAT.loading=null});
+  await SAT.loading;if(tok===SAT.tok)satShow();
+}
+function satSummary(side){const s=SAT[side];if(!s||!s.used.length)return`${side==='before'?'Before':'After'}: none clear`;
+  return`${side==='before'?'Before':'After'}: ${s.used.map(u=>`${u.name} ${fmtDay(u.d)}`).join(', ')} (${Math.round(s.share*100)}% of the area)`}
+function satShow(){
+  satDrop();if(!ground||!session)return;const g=SAT.grid;
+  if(SAT.mode!=='today'&&g){
+    const A=SAT.before&&SAT.before.tex,B=SAT.after&&SAT.after.tex;
+    const first=SAT.mode==='after'?B:A,second=SAT.mode==='before'?A:B;
+    const showA=SAT.mode==='before'||SAT.mode==='sweep',showB=SAT.mode==='after'||SAT.mode==='sweep';
+    if(showB&&B){satAfterMat.uniforms.uT.value=B;SAT.mesh2=new THREE.Mesh(satGeo(g,0.02),satAfterMat);SAT.mesh2.renderOrder=1;ground.add(SAT.mesh2)}   // After, underneath
+    if(showA&&A){const u=satMat.uniforms;u.uA.value=A;u.uSweep.value=SAT.mode==='sweep'?1:0;SAT.mesh=new THREE.Mesh(satGeo(g,0.02),satMat);SAT.mesh.renderOrder=2;ground.add(SAT.mesh)}}   // Before, on top
+  if(SAT.dmg&&SAT.distTex&&g){SAT.distMesh=new THREE.Mesh(satGeo(g,0.02),new THREE.MeshBasicMaterial({map:SAT.distTex,transparent:true,opacity:0.85,depthWrite:false,fog:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-12}));SAT.distMesh.renderOrder=3;ground.add(SAT.distMesh)}
+  const parts=[];if(SAT.mode==='before'||SAT.mode==='sweep')parts.push(satSummary('before'));if(SAT.mode==='after'||SAT.mode==='sweep'||SAT.dmg)parts.push(satSummary('after'));
+  if(SAT.dmg)parts.push(SAT.distTex?'Damage overlay: NASA disturbance alerts on top (bright = vegetation lost)':'Damage overlay: no alerts loaded');
+  satInfo(parts.join(' · ')+(SAT.mode!=='today'?' · NASA HLS, 30 m. Gaps show today\'s map.':''));
+  satSweep();satBright()}
+function satBright(){satMat.uniforms.uBright.value=satAfterMat.uniforms.uBright.value=groundLevel()}
+// storm sweep mask: everywhere the core has passed, up to the frame on screen
+function colMax(fr){if(fr.cmax)return fr.cmax;const G=fr.out.grid,v=fr.out.vol.z,N2=G.nx*G.ny,m=new Uint8Array(N2);
+  for(let z=0;z<G.nz;z++){const o=z*N2;for(let k=0;k<N2;k++){const q=v[o+k];if(q>m[k])m[k]=q}}return fr.cmax=m}
+// strongest wind speed (inbound or outbound) at each spot on the lowest tilt, only where there's echo
+function velMax(fr){if(fr.vmaxc!==undefined)return fr.vmaxc;const t=fr.out.tilts&&fr.out.tilts[0],G=fr.out.grid,N2=G.nx*G.ny;
+  if(!t||!t.v||t.v.length!==N2)return fr.vmaxc=null;const m=new Uint8Array(N2);
+  for(let k=0;k<N2;k++){const q=t.v[k];if(!q||(t.z&&t.z[k]<42))continue;m[k]=Math.abs(q-64)}return fr.vmaxc=m}
+function satSweep(){
+  if(SAT.mode!=='sweep'||!(SAT.mesh||SAT.mesh2))return;const ok=frames.find(f=>f.state==='ok'&&f.out);if(!ok)return;const G=ok.out.grid,N2=G.nx*G.ny;
+  const m=new Uint8Array(N2),q0=SAT.th+32;
+  if(SAT.byCore)for(let i=0;i<=st.t&&i<frames.length;i++){const f=frames[i];if(f.state!=='ok'||!f.out)continue;const c=colMax(f);
+    for(let k=0;k<N2;k++){const q=c[k];if(q<q0-4)continue;const a=Math.min(255,Math.round((q-(q0-4))/8*255));if(a>m[k])m[k]=a}}
+  // velocity intensity: wherever the low-level wind (2D radar velocity, either colour) has been strong. Faster wind wipes to the
+  // After map more fully: from the slider speed it starts showing through, 15 m/s above that it's fully swept
+  if(SAT.byVel)for(let i=0;i<=st.t&&i<frames.length;i++){const f=frames[i];if(f.state!=='ok'||!f.out)continue;const w=velMax(f);if(!w)continue;
+    for(let k=0;k<N2;k++){const s=w[k];if(s<=SAT.vth)continue;const a=Math.min(255,Math.round((s-SAT.vth)/15*255));if(a>m[k])m[k]=a}}
+  if(SAT.maskTex&&(SAT.maskTex.image.width!==G.nx||SAT.maskTex.image.height!==G.ny)){SAT.maskTex.dispose();SAT.maskTex=null}
+  if(!SAT.maskTex){SAT.maskTex=new THREE.DataTexture(m,G.nx,G.ny,THREE.LuminanceFormat);SAT.maskTex.magFilter=SAT.maskTex.minFilter=THREE.LinearFilter;SAT.maskTex.unpackAlignment=1}
+  else SAT.maskTex.image.data=m;
+  SAT.maskTex.needsUpdate=true;const u=satMat.uniforms;u.uMask.value=SAT.maskTex;u.uGrid.value.set(G.x0,G.y0,G.nx*G.dx,G.ny*G.dx)}
+function setSat(mode){SAT.mode=mode;[['today','satToday'],['before','satBefore'],['after','satAfter'],['sweep','satSweep']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===mode));
+  $('sweepRow').hidden=mode!=='sweep'||!SAT.byCore;$('velRow').hidden=mode!=='sweep'||!SAT.byVel;$('sweepBy').hidden=mode!=='sweep';if(mode==='today'&&!SAT.dmg){satDrop();satInfo('');return}satEnsure()}
+$('satToday').onclick=()=>setSat('today');$('satBefore').onclick=()=>setSat('before');$('satAfter').onclick=()=>setSat('after');$('satSweep').onclick=()=>setSat('sweep');
+$('satDmg').onclick=()=>{SAT.dmg=!SAT.dmg;$('satDmg').setAttribute('aria-pressed',SAT.dmg);if(!SAT.dmg){satShow();if(SAT.mode==='today')satInfo('');return}satEnsure()};
+const syncBy=()=>{$('byCore').setAttribute('aria-pressed',SAT.byCore);$('byVel').setAttribute('aria-pressed',SAT.byVel);$('sweepRow').hidden=SAT.mode!=='sweep'||!SAT.byCore;$('velRow').hidden=SAT.mode!=='sweep'||!SAT.byVel;satSweep()};
+$('byCore').onclick=()=>{SAT.byCore=!SAT.byCore;if(!SAT.byCore&&!SAT.byVel)SAT.byVel=true;syncBy()};
+$('byVel').onclick=()=>{if(session&&!session.doppler){satInfo('This radar has no Doppler velocity, so the sweep can only follow the core.');return}SAT.byVel=!SAT.byVel;if(!SAT.byCore&&!SAT.byVel)SAT.byCore=true;syncBy()};
+$('velTh').oninput=()=>{SAT.vth=+$('velTh').value;$('velThv').textContent=SAT.vth+' m/s';satSweep()};
+$('sweepTh').oninput=()=>{SAT.th=+$('sweepTh').value;$('sweepThv').textContent=SAT.th+' dBZ';satSweep()};
+
+
+/* flat radar (lowest tilt) drawn from its native polar data */
+const topPlane=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({transparent:true,opacity:0.9,depthWrite:false,fog:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
+topPlane.rotation.x=-Math.PI/2;topPlane.position.y=0.15;topPlane.renderOrder=2;world.add(topPlane);
+let topTex=null,topKey='';
+function polarTexture(frame,key){
+  const P=frame.out.polar,f=P[key];if(!f)return null;
+  const W=1024,R=TOPR,data=new Uint8Array(W*W*4),lut=LUTC[key];
+  if(!frame.rayLut){const az=P.az,l=new Int32Array(3600).fill(-1),best=new Float32Array(3600).fill(99);
+    for(let i=0;i<az.length;i++){const c=Math.round(az[i]*10);for(let d=-12;d<=12;d++){const b=((c+d)%3600+3600)%3600,dist=Math.abs(d)/10;if(dist<best[b]){best[b]=dist;l[b]=i}}}
+    for(let b=0;b<3600;b++)if(best[b]>1)l[b]=-1;frame.rayLut=l}
+  const zq=key!=='z'&&P.z&&P.z.nbins===f.nbins?P.z.q:null;
+  const L=frame.rayLut,nb=f.nbins,q=f.q,rs=P.rs/1000,r0=P.r0/1000,cosel=Math.cos(P.el*Math.PI/180);
+  for(let r=0;r<W;r++){const y=-R+(r+0.5)*2*R/W;for(let c=0;c<W;c++){const x=-R+(c+0.5)*2*R/W,s=Math.hypot(x,y);if(s>=R)continue;
+    let a=Math.atan2(x,y)*1800/Math.PI;if(a<0)a+=3600;const ray=L[Math.round(a)%3600];if(ray<0)continue;
+    const b=Math.floor((s/cosel-r0)/rs);if(b<0||b>=nb)continue;const v=q[ray*nb+b];if(!v)continue;if(zq&&zq[ray*nb+b]<42)continue;const o=(r*W+c)*4,lo=v*4;
+    data[o]=lut[lo];data[o+1]=lut[lo+1];data[o+2]=lut[lo+2];data[o+3]=lut[lo+3]}}
+  const t=new THREE.DataTexture(data,W,W,THREE.RGBAFormat);t.needsUpdate=true;t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearFilter;return t;
+}
+
+/* ================= worker + loading ================= */
+let worker=null,jobId=0;const pendingJobs=new Map();
+function getWorker(){if(worker)return worker;worker=new Worker('worker.js');
+  worker.onmessage=e=>{const p=pendingJobs.get(e.data.id);if(!p)return;pendingJobs.delete(e.data.id);e.data.ok?p.res(e.data):p.rej(new Error(e.data.error))};
+  worker.onerror=e=>{for(const p of pendingJobs.values())p.rej(new Error('The processing worker crashed: '+(e.message||'unknown')));pendingJobs.clear();worker=null};
+  return worker}
+function processScan(bytes,method,opt){const id=++jobId;return new Promise((res,rej)=>{pendingJobs.set(id,{res,rej});getWorker().postMessage({id,buf:bytes.buffer,method,opt},[bytes.buffer])})}
+
+let SITES=[],session=null,frames=[],TOPR=150;
+/* ---- time zone: your phone's, or locked to the radar's own local time (setting in the storm picker) ---- */
+const TZ_STATE={QLD:'Australia/Brisbane',NSW:'Australia/Sydney',ACT:'Australia/Sydney',VIC:'Australia/Melbourne',TAS:'Australia/Hobart',SA:'Australia/Adelaide',NT:'Australia/Darwin',WA:'Australia/Perth',NI:'Pacific/Norfolk'};
+function tzOf(s){if(!s)return undefined;if(s.state&&TZ_STATE[s.state])return TZ_STATE[s.state];const lon=s.lon,lat=s.lat;if(lon==null)return undefined;
+  if(lon<129)return'Australia/Perth';if(lon<141)return lat>-26?'Australia/Darwin':'Australia/Adelaide';if(lon>160)return'Pacific/Norfolk';if(lat<-39.5)return'Australia/Hobart';if(lat>-28.6)return'Australia/Brisbane';return'Australia/Sydney'}
+let tzRadar=false;try{tzRadar=localStorage.getItem('hist-tz')==='radar'}catch(e){}
+function pickedSite(){return SITES.find(s=>String(s.id)===$('site').value)}
+function histTZ(){if(session&&session.tzForce)return session.tzForce;if(!tzRadar)return undefined;return tzOf(session?session.site:pickedSite())}
+function tzOffset(ms,tz){const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric'}).formatToParts(new Date(ms));
+  const g=t=>+p.find(x=>x.type===t).value;return Date.UTC(g('year'),g('month')-1,g('day'),g('hour')%24,g('minute'),g('second'))-ms}
+// midnight at the start of a calendar day, in your time or in the radar's time zone
+function dayStart(y,m,d,tz){if(!tz)return new Date(y,m-1,d).getTime();const g=Date.UTC(y,m-1,d);let t=g-tzOffset(g,tz);return g-tzOffset(t,tz)}
+const fmtTime=(t,tz=histTZ())=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZone:tz});
+const fmtDate=t=>new Date(t).toLocaleDateString([],{day:'numeric',month:'short',year:'numeric',timeZone:histTZ()});
+function syncTZ(){$('tzMine').setAttribute('aria-pressed',!tzRadar);$('tzRadar').setAttribute('aria-pressed',tzRadar);
+  const s=pickedSite(),z=tzOf(s);$('dateLbl').textContent=tzRadar?(s?`Date (${s.name.replace(/ \(.*\)/,'')} local time)`:"Date (the radar's local time)"):'Date (your local time)'}
+function setTZ(on){tzRadar=on;try{localStorage.setItem('hist-tz',on?'radar':'mine')}catch(e){}syncTZ();
+  if(!$('pick2').hidden&&dayCache)$('find').click();   // re-find so the day and times match the new setting
+  if(session){meta();drawLoadbar()}}
+$('tzMine').onclick=()=>setTZ(false);$('tzRadar').onclick=()=>setTZ(true);
+
+async function loadSites(){
+  try{SITES=await Archive.sites()}catch(e){$('site').innerHTML='<option>Couldn\'t load the radar list</option>';$('findInfo').textContent=e.message;$('findInfo').className='info err';return}
+  const sel=$('site');sel.innerHTML='';const groups={};
+  for(const s of SITES){const g=s.state||'Other';(groups[g]=groups[g]||[]).push(s)}
+  for(const[g,list]of Object.entries(groups)){const og=document.createElement('optgroup');og.label=g;
+    for(const s of list){const o=document.createElement('option');o.value=s.id;const dp=s.epochs.some(e=>e.dp);o.textContent=`${s.name}${dp?' · CC':''}${s.current?'':' (closed)'}`;og.appendChild(o)}sel.appendChild(og)}
+  let saved=null;try{saved=localStorage.getItem('hist-site')}catch(e){}
+  sel.value=saved&&SITES.some(s=>String(s.id)===saved)?saved:(SITES.some(s=>s.id===66)?'66':String(SITES[0].id));
+  syncTZ();
+}
+/* ---- presets: famous storms, one tap fills in the radar, day and window (times are Brisbane time) ---- */
+const PRESET_TZ='Australia/Brisbane';
+const PRESETS=[
+  {name:'Gympie supercell',note:'Confirmed tornado',site:8,date:'2025-11-24',from:'15:30',to:'17:25'},
+  {name:'Brisbane supercell',note:'',site:66,date:'2025-10-26',from:'15:30',to:'17:25'},
+];
+let presetPending=null;
+function drawPresets(){const box=$('presets');box.innerHTML='';
+  const hm=t=>{const[h,m]=t.split(':').map(Number);return[`${(h%12)||12}:${String(m).padStart(2,'0')}`,h<12?'am':'pm']};
+  const span=p=>{const[a,x]=hm(p.from),[b,y]=hm(p.to);return (x===y?`${a}–${b} ${y}`:`${a} ${x}–${b} ${y}`)+" AEST"};
+  for(const p of PRESETS){const b=document.createElement('button');b.className='preset';b.type='button';b.setAttribute('aria-pressed','false');
+    const d=new Date(p.date+'T12:00:00Z').toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+    p.span=span(p);b.innerHTML=`${p.name}<span>${d} · ${p.span}${p.note?` · <b>${p.note}</b>`:''}</span>`;
+    b.onclick=()=>{if(!SITES.some(s=>s.id===p.site)){$('findInfo').className='info err';$('findInfo').textContent="That radar isn't in the archive list right now.";return}
+      box.querySelectorAll('.preset').forEach(x=>x.setAttribute('aria-pressed',x===b));
+      $('site').value=String(p.site);try{localStorage.setItem('hist-site',$('site').value)}catch(e){}syncTZ();$('date').value=p.date;presetPending=p;$('find').click()};
+    box.appendChild(b)}}
+drawPresets();
+const clearPreset=()=>$('presets').querySelectorAll('.preset').forEach(x=>x.setAttribute('aria-pressed','false'));
+$('site').onchange=()=>{syncTZ();clearPreset();try{localStorage.setItem('hist-site',$('site').value)}catch(e){}$('pick2').hidden=true;$('findInfo').textContent=''};
+$('date').onchange=()=>{clearPreset();$('pick2').hidden=true;$('findInfo').textContent=''};
+(function maxDate(){const d=new Date(Date.now()-2*864e5);$('date').max=d.toISOString().slice(0,10)})();
+
+let dayCache=null;
+$('find').onclick=async()=>{
+  const site=SITES.find(s=>String(s.id)===$('site').value),dv=$('date').value;if(!site||!dv)return;
+  const info=$('findInfo');info.className='info';info.textContent='Reading the archive index…';$('find').disabled=true;$('pick2').hidden=true;
+  try{
+    // the archive stores whole UTC days; a local day can span two of them
+    const pre=presetPending&&presetPending.site===site.id&&presetPending.date===dv?presetPending:null;presetPending=null;
+    const[y,m,d]=dv.split('-').map(Number),tz=tzRadar?tzOf(site):undefined,dz=pre?PRESET_TZ:tz,start=dayStart(y,m,d,dz),end=dayStart(y,m,d+1,dz);   // presets search the Brisbane day; times still show in your chosen zone
+    const days=[...new Set([start,end-1].map(t=>new Date(t).toISOString().slice(0,10).replace(/-/g,'')))];
+    const entries=[],opened=[];
+    for(const dd of days){try{const day=await Archive.openDay(site.id,dd);opened.push(day);for(const e of day.entries)if(e.time>=start&&e.time<end)entries.push({...e,day})}catch(e){if(e.message!=='not-found')throw e}}
+    if(!entries.length){info.className='info err';info.textContent=opened.length?'No scans from this radar on that day.':'The archive has nothing for this radar on that day. It might be too recent (about 2 days behind), or the radar wasn\'t running.';return}
+    dayCache={site,date:dv,entries,preset:pre};
+    const fill=(sel,def)=>{sel.innerHTML='';entries.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=fmtTime(e.time,tz);sel.appendChild(o)});sel.value=def};
+    let a=0,b=entries.length-1;
+    if(pre){   // preset: its exact window (Brisbane time), every scan
+      const at=hm=>{const[h,mi]=hm.split(':').map(Number);return start+h*36e5+mi*6e4};const t0=at(pre.from)-60e3,t1=at(pre.to)+60e3;
+      a=entries.findIndex(e=>e.time>=t0);b=entries.length-1;while(b>0&&entries[b].time>t1)b--;if(a<0)a=0;if(b<a)b=a;$('every').value='0'}
+    else{a=Math.max(0,Math.floor(entries.length/2)-6);b=Math.min(entries.length-1,a+12)}
+    fill($('from'),a);fill($('to'),b);
+    const ep=Archive.epochOn(site,new Date(start));
+    // a preset only needs the Build button: its window and settings are already filled in
+    $('pickFields').hidden=!!pre;$('sizeInfo').hidden=!!pre;
+    if(pre){info.textContent='';$('pick2').hidden=false;$('pick2').style.display='grid';updateSize();return}
+    info.textContent=`${entries.length} scans found, ${fmtTime(entries[0].time,tz)} to ${fmtTime(entries.at(-1).time,tz)}. ${ep.dp?'Dual-pol radar: CC available.':'Older radar: no CC.'}${ep.doppler?'':' No Doppler velocity.'}`;
+    $('pick2').hidden=false;$('pick2').style.display='grid';updateSize();
+  }catch(e){info.className='info err';info.textContent=e.message==='not-found'?'Nothing in the archive for that day.':`Couldn't read the archive: ${e.message}`}
+  finally{$('find').disabled=false}
+};
+function chosen(){
+  if(!dayCache)return[];const E=dayCache.entries,a=+$('from').value,b=+$('to').value,ev=+$('every').value*60e3;
+  const lo=Math.min(a,b),hi=Math.max(a,b),out=[];let last=-Infinity;
+  for(let i=lo;i<=hi;i++){if(!ev||E[i].time-last>=ev-60e3){out.push(E[i]);last=E[i].time}}
+  return out;
+}
+function updateSize(){const c=chosen(),mb=c.reduce((n,e)=>n+e.csize,0)/1e6;
+  $('build').textContent=$('pickFields').hidden&&c.length<=24?`Build storm · about ${Math.round(mb)} MB`:'Build storm';
+  $('sizeInfo').className='info'+(c.length>24?' err':'');
+  $('sizeInfo').textContent=c.length>24?`${c.length} scans is too many to hold on a phone. Pick 24 or fewer (widen "Every" or shorten the time).`:`${c.length} scan${c.length===1?'':'s'} · about ${Math.round(mb)} MB to download`;
+  $('build').disabled=!c.length||c.length>24}
+for(const id of['from','to','every','area'])$(id).onchange=updateSize;
+$('build').onclick=()=>{const list=chosen();if(!list.length||list.length>24)return;startSession(dayCache.site,list,false,dayCache.preset?PRESET_TZ:null);$('picker').hidden=true;$('closePicker').hidden=false};
+$('openPicker').onclick=()=>{$('picker').hidden=false};$('closePicker').onclick=()=>{$('picker').hidden=true};
+
+function gridOpt(){return $('area').value==='close'?{half:60,dx:0.5,cx:session?session.focus.x:0,cy:session?session.focus.y:0}:{half:120,dx:1,cx:0,cy:0}}
+async function startSession(site,list,keepFocus,tzForce){
+  if(session)session.abort.abort();
+  const focus=keepFocus&&session?session.focus:{x:0,y:0};
+  if(tzForce===undefined)tzForce=keepFocus&&session?session.tzForce:null;
+  session={site,list,abort:new AbortController(),focus,tzForce};   // presets always show Brisbane time
+  session.opt=gridOpt();
+  frames=list.map(e=>({entry:e,state:'wait',out:null}));
+  const ep=Archive.epochOn(site,new Date(list[0].time));session.dp=ep.dp;session.doppler=ep.doppler;
+  $('dC').disabled=!ep.dp;$('dV').disabled=!ep.doppler;if((st.data==='c'&&!ep.dp)||(st.data==='v'&&!ep.doppler))setData('z',true);
+  $('time').max=frames.length-1;st.t=0;$('time').value=0;
+  TOPR=150;
+  buildGround(site,Math.max(TOPR,session.opt.half+Math.hypot(focus.x,focus.y))+10);satReset();
+  clearStorm();topPlane.visible=false;drawLoadbar();meta();home();
+  const sess=session;
+  let chain=Promise.resolve();
+  for(let i=0;i<frames.length;i++){
+    if(sess!==session)return;
+    const fr=frames[i];fr.state='dl';drawLoadbar();
+    let scan;
+    try{scan=await Archive.getScan(fr.entry.day,fr.entry,p=>{if(i===st.t||!frames.some(f=>f.state==='ok'))status(`Downloading ${fmtTime(fr.entry.time)} · ${Math.round(p*100)}%`)},sess.abort.signal)}
+    catch(e){if(sess.abort.signal.aborted)return;fr.state='bad';fr.err=e.message;drawLoadbar();continue}
+    fr.state='pr';drawLoadbar();
+    chain=chain.then(async()=>{
+      if(sess!==session)return;
+      if(i===st.t||!frames.some(f=>f.state==='ok'))status(`Building ${fmtTime(fr.entry.time)} in 3D…`);
+      try{const r=await processScan(scan.bytes,scan.method,sess.opt);if(sess!==session)return;fr.out=r.out;fr.meta=r.meta;fr.state='ok';
+        if(i===st.t||frames.filter(f=>f.state==='ok').length===1){if(frames.filter(f=>f.state==='ok').length===1){st.t=i;$('time').value=i;render();home();return}render()}}
+      catch(e){fr.state='bad';fr.err=e.message;if(i===st.t)status(`Couldn't build ${fmtTime(fr.entry.time)}: ${e.message}`,true)}
+      drawLoadbar();
+      if(frames.every(f=>f.state==='ok'||f.state==='bad'))status(null);
+    });
+    await new Promise(r=>setTimeout(r,0));
+    if(frames.filter(f=>f.state==='pr').length>2)await chain;   // don't pile up too many waiting scans
+  }
+}
+function drawLoadbar(){const lb=$('loadbar');lb.innerHTML='';frames.forEach((f,i)=>{const s=document.createElement('i');s.className=({dl:'dl',pr:'pr',ok:'ok',bad:'bad'})[f.state]||'';if(i===st.t)s.classList.add('cur');s.title=fmtTime(f.entry.time);lb.appendChild(s)})}
+const PNAME={z:'Super-Res Reflectivity',v:'Super-Res Velocity',c:'Correlation Coefficient'};
+const VNAME={tilts:'All tilts, true heights',blocks:'3D Blocks',shells:'3D Shells',volume:'Volume Render'};
+function meta(){
+  const f=frames[st.t];
+  if(!session){$('siteCode').textContent='';$('siteName').textContent='RadixAus History';$('siteSub').textContent='Pick a radar and a date to rebuild a storm';
+    $('pname').textContent=PNAME[st.data];$('psub').textContent='';$('pclock').textContent='–';$('pdate').textContent='';return}
+  $('siteCode').textContent='IDR'+String(session.site.id).padStart(2,'0');$('siteName').textContent=session.site.name;
+  const nt=f&&f.out?f.out.tilts.length:0,peak=f&&f.out?` · peak <span class="hot">${Math.round(f.out.maxz)} dBZ</span>`:'';
+  $('siteSub').innerHTML=`AURA archive${nt?` · ${nt} tilts`:''}${$('area').value==='close'?' · close-up':''}${peak}`;
+  $('pname').textContent=PNAME[st.data];
+  $('psub').textContent=st.view==='radar'?(f&&f.out?`Elevation = ${f.out.polar.el.toFixed(1)}°`:''):`${VNAME[st.view]} · height ×${st.exag}`;
+  $('pclock').textContent=f?new Date(f.entry.time).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',timeZoneName:'short',timeZone:histTZ()}):'–';
+  $('pdate').textContent=f?new Date(f.entry.time).toLocaleDateString([],{timeZone:histTZ()}):'';
+}
+
+/* ================= drawing ================= */
+const tmp=new THREE.Object3D(),cc=new THREE.Color();
+function clearStorm(){for(const o of storm.children.slice()){storm.remove(o);if(o.userData.keep)continue;if(o.isInstancedMesh)o.geometry.dispose();[].concat(o.material).forEach(m=>m.dispose())}}
+const colorOf=d=>ramp(RAMP[st.data],d);
+function passes(d){const m=st.min[st.data][st.view];return st.data==='z'?d>=m:st.data==='v'?Math.abs(d)>=m:d<=m}
+function buildBlocks(o){
+  const G=o.grid,vol=o.vol[st.data],dec=DEC[st.data],list=[];
+  for(let k=0;k<G.nz;k++)for(let j=0;j<G.ny;j++)for(let i=0;i<G.nx;i++){const q=vol[(k*G.ny+j)*G.nx+i];if(!q)continue;const d=dec(q);if(passes(d))list.push(i,j,k,d)}
+  const n=list.length/4,m=new THREE.InstancedMesh(new THREE.BoxGeometry(G.dx,G.dz,G.dx),new THREE.MeshLambertMaterial({clippingPlanes:[clip]}),Math.max(1,n));
+  for(let p=0;p<n;p++){const i=list[p*4],j=list[p*4+1],k=list[p*4+2],d=list[p*4+3];
+    tmp.position.set(G.x0+(i+0.5)*G.dx,(k+0.5)*G.dz,-(G.y0+(j+0.5)*G.dx));tmp.updateMatrix();m.setMatrixAt(p,tmp.matrix);
+    const[r,g,b]=colorOf(d);m.setColorAt(p,cc.setRGB(r/255,g/255,b/255).convertSRGBToLinear())}
+  m.count=n;storm.add(m);
+}
+function buildTilts(o){
+  const G=o.grid,S=G.dx<0.9?2:1,dec=DEC[st.data];
+  o.tilts.forEach((tl,idx)=>{
+    const g=tl[st.data],h=tl.h,list=[];
+    for(let j=0;j<G.ny;j+=S)for(let i=0;i<G.nx;i+=S){const q=g[j*G.nx+i];if(!q||!h[j*G.nx+i])continue;const d=dec(q);if(st.data!=='z'&&tl.z[j*G.nx+i]<42)continue;if(passes(d))list.push(i,j,h[j*G.nx+i]/10,d)}
+    const n=list.length/4;if(!n)return;
+    const m=new THREE.InstancedMesh(new THREE.BoxGeometry(G.dx*S,0.12,G.dx*S),new THREE.MeshLambertMaterial({clippingPlanes:[clip]}),n);
+    for(let p=0;p<n;p++){const i=list[p*4],j=list[p*4+1],hh=list[p*4+2],d=list[p*4+3];
+      tmp.position.set(G.x0+(i+S/2)*G.dx,hh+idx*st.spread/st.exag,-(G.y0+(j+S/2)*G.dx));tmp.updateMatrix();m.setMatrixAt(p,tmp.matrix);
+      const[r,g2,b]=colorOf(d);m.setColorAt(p,cc.setRGB(r/255,g2/255,b/255).convertSRGBToLinear())}
+    storm.add(m);
+  });
+}
+function meshGeo(fr,key){fr.geo=fr.geo||{};if(fr.geo[key]!==undefined)return fr.geo[key];const m=fr.out.meshes[key];
+  if(!m||!m.idx.length)return fr.geo[key]=null;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(m.pos,3));g.setIndex(new THREE.BufferAttribute(m.idx,1));g.computeVertexNormals();return fr.geo[key]=g}
+/* Cloud look: the storm drawn like a real cloud. Bright white tops, darker grey base, a little lumpy shading, lit by the sun
+   for the scan's time of day (so it turns golden at sunset and dim at night). The outer shell becomes a thick cloud you can't
+   see through, like the real thing. */
+function cloudColours(geo){if(geo.userData.cloud)return;const p=geo.attributes.position,n=p.count,c=new Float32Array(n*3);
+  let top=0;for(let i=0;i<n;i++)top=Math.max(top,p.getY(i));top=Math.max(top,4);
+  for(let i=0;i<n;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),h=Math.min(1,Math.max(0,y/top));
+    const lump=(Math.sin(x*1.7+z*0.9)*Math.sin(z*1.3-y*2.1)+Math.sin(x*0.6-y*1.4+z*2.3))*0.04;
+    const v=Math.min(1,0.46+0.52*Math.pow(h,0.7)+lump);c[i*3]=v*0.97;c[i*3+1]=v*0.98;c[i*3+2]=v}
+  geo.setAttribute('color',new THREE.BufferAttribute(c,3));geo.userData.cloud=true}
+function buildShells(fr){
+  let outer=true;
+  SHELLS[st.data].forEach(([k,,col,key],n)=>{
+    if(!st.on[st.data][k])return;const pct=st.op[st.data][k];if(pct<=0)return;const geo=meshGeo(fr,key);if(!geo)return;
+    let o=pct/100;
+    if(st.grey){cloudColours(geo);if(outer)o=Math.max(o,0.93);outer=false}
+    const solid=o>=0.99;
+    const mat=st.grey?new THREE.MeshLambertMaterial({color:0xffffff,vertexColors:true,transparent:!solid,opacity:solid?1:o,side:THREE.DoubleSide,depthWrite:o>=0.8,clippingPlanes:[clip]})
+      :new THREE.MeshPhongMaterial({color:col,transparent:!solid,opacity:solid?1:o,side:THREE.DoubleSide,depthWrite:o>=0.8,shininess:30,clippingPlanes:[clip]});
+    const m=new THREE.Mesh(geo,mat);
+    m.renderOrder=10-n;storm.add(m)});
+}
+function stormCentre(fr){
+  if(fr.centre)return fr.centre;const o=fr.out,G=o.grid,v=o.vol.z,N2=G.nx*G.ny;let sx=0,sy=0,w=0;
+  for(let k=0;k<N2;k++){let m=0;for(let z=0;z<G.nz;z+=2){const q=v[z*N2+k];if(q>m)m=q}const d=m-32;if(d>=40){const ww=(d-39)*(d-39);sx+=ww*(G.x0+(k%G.nx+0.5)*G.dx);sy+=ww*(G.y0+(Math.floor(k/G.nx)+0.5)*G.dx);w+=ww}}
+  return fr.centre=w?{x:sx/w,y:sy/w}:{x:G.x0+G.nx*G.dx/2,y:G.y0+G.ny*G.dx/2};
+}
+function freeOldGeometry(keep){frames.forEach((f,i)=>{if(Math.abs(i-keep)>2&&f.geo){for(const g of Object.values(f.geo))g&&g.dispose();f.geo=null}})}
+function render(){
+  meta();if(session&&frames[st.t])applySky(frames[st.t].entry.time,session.site);drawLoadbar();$('time').value=st.t;
+  const fr=frames[st.t];
+  if(!fr){clearStorm();return}
+  if(fr.state!=='ok'){if(fr.state==='bad')status(`Couldn't load ${fmtTime(fr.entry.time)}: ${fr.err}`,true);else status(`Still loading ${fmtTime(fr.entry.time)}…`);return}
+  if(frames.every(f=>f.state==='ok'||f.state==='bad'))status(null);else if(!$('status').classList.contains('err'))status(null);
+  clearStorm();freeOldGeometry(st.t);freeVolTextures(st.t);dropFrame();document.body.classList.toggle('withshells',st.view==='volume'&&st.volShells);
+  if(satMesh)satMesh.material.color.setScalar(groundLevel());satBright();if(SAT.mode==='sweep')satSweep();
+  const radar=st.view==='radar';
+  TOPR=Math.min(150,(fr.out.polar.r0+fr.out.polar.rs*(fr.out.polar.z?fr.out.polar.z.nbins:0))/1000||150);
+  topPlane.visible=radar;
+  if(radar){const key=`${st.t}|${st.data}`;if(key!==topKey){if(topTex)topTex.dispose();topTex=polarTexture(fr,st.data)||polarTexture(fr,'z');topKey=key}
+    topPlane.material.map=topTex;topPlane.material.opacity=st.radarOp/100;topPlane.material.needsUpdate=true;topPlane.scale.set(TOPR*2,TOPR*2,1);
+    if(st.raise)buildShells(fr)}
+  else if(st.view==='blocks')buildBlocks(fr.out);else if(st.view==='tilts')buildTilts(fr.out);else if(st.view==='volume')buildVolume(fr);else buildShells(fr);
+  storm.scale.y=st.exag;storm.position.y=st.lift;
+}
+
+/* ================= volume render (GR2Analyst style) ================= */
+const GR2Z=[[5,[4,233,231]],[10,[1,159,244]],[15,[3,0,244]],[20,[2,253,2]],[25,[1,197,1]],[30,[0,142,0]],[35,[253,248,2]],[40,[229,188,0]],[45,[253,149,0]],[50,[253,0,0]],[55,[212,0,0]],[60,[188,0,0]],[65,[248,0,253]],[70,[152,84,198]],[75,[253,253,253]]];
+const VOL_STEPS={low:110,med:190,high:300};
+const lutCache={};
+function lutTex(field,pal){const key=field+pal;if(lutCache[key])return lutCache[key];
+  const R=field==='z'?(pal==='gr2'?GR2Z:ZST):RAMP[field],d=new Uint8Array(256*4);
+  for(let q=1;q<256;q++){const[r,g,b]=ramp(R,DEC[field](q));d.set([r,g,b,255],q*4)}
+  const t=new THREE.DataTexture(d,256,1,THREE.RGBAFormat);t.needsUpdate=true;t.magFilter=t.minFilter=THREE.LinearFilter;return lutCache[key]=t}
+function tex3(data,G){const t=new THREE.DataTexture3D(data,G.nx,G.ny,G.nz);t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;
+  t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return t}
+function volTex(fr,field){fr.vtex=fr.vtex||{};if(fr.vtex[field])return fr.vtex[field];const G=fr.out.grid;let d=fr.out.vol[field];
+  if(field!=='z'){const fillv=field==='v'?64:200;d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
+  return fr.vtex[field]=tex3(d,G)}
+const volMat=new THREE.ShaderMaterial({
+  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()}},
+  vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`precision highp float;precision highp sampler3D;
+uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
+vec2 hitBox(vec3 o,vec3 d){vec3 inv=1.0/d;vec3 t0=(vec3(-0.5)-o)*inv;vec3 t1=(vec3(0.5)-o)*inv;vec3 a=min(t0,t1);vec3 b=max(t0,t1);return vec2(max(max(a.x,a.y),a.z),min(min(b.x,b.y),b.z));}
+void main(){
+  vec3 d=normalize(vPos-uCam);vec2 b=hitBox(uCam,d);if(b.x>b.y)discard;b.x=max(b.x,0.0);
+  float dt=1.0/uSteps;float t=b.x+dt*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
+  vec4 acc=vec4(0.0);
+  for(int i=0;i<1400;i++){
+    if(t>b.y||acc.a>0.97)break;
+    vec3 p=uCam+d*t;t+=dt;
+    if(p.x<uCut)continue;
+    vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);
+    float zq=texture(uZ,tc).r*255.0;float dbz=zq-32.0;float a=0.0;vec3 col=vec3(0.0);
+    if(uCloud==1){   // cloud: white where the sun reaches, grey where the storm shades itself
+      a=smoothstep(uMin-6.0,uMin+6.0,dbz)*(0.45+0.55*clamp((dbz-uMin)/35.0,0.0,1.0));
+      if(a>0.002){float od=0.0;
+        for(int j=1;j<=6;j++){vec3 q=p+uSunDir*(0.03*float(j));vec3 qc=vec3(q.x+0.5,0.5-q.z,q.y+0.5);
+          if(qc.x<0.0||qc.y<0.0||qc.z<0.0||qc.x>1.0||qc.y>1.0||qc.z>1.0)break;
+          od+=smoothstep(uMin-6.0,uMin+6.0,texture(uZ,qc).r*255.0-32.0);}
+        float T=exp(-od*0.75),h=clamp(p.y+0.5,0.0,1.0);
+        col=uSunCol*T*1.05+uSky*(0.32+0.38*h);}
+    }
+    else if(uField==0){a=smoothstep(uMin,uMin+6.0,dbz)*(0.18+0.82*clamp((dbz-uMin)/40.0,0.0,1.0));col=texture(uLut,vec2((zq+0.5)/256.0,0.5)).rgb;}
+    else if(uField==1){float fq=texture(uF,tc).r*255.0;float v=fq-64.0;a=smoothstep(12.0,18.0,dbz)*smoothstep(uMin,uMin+5.0,abs(v))*(0.25+0.75*clamp((abs(v)-uMin)/25.0,0.0,1.0));col=texture(uLut,vec2((fq+0.5)/256.0,0.5)).rgb;}
+    else{float fq=texture(uF,tc).r*255.0;float c=fq/200.0;a=smoothstep(25.0,32.0,dbz)*(1.0-smoothstep(uMin-0.05,uMin,c))*(0.3+0.7*clamp((uMin-c)/0.25,0.0,1.0));col=texture(uLut,vec2((fq+0.5)/256.0,0.5)).rgb;}
+    a=clamp(a*uOpacity*dt*60.0,0.0,1.0);
+    acc.rgb+=(1.0-acc.a)*a*col;acc.a+=(1.0-acc.a)*a;
+  }
+  if(acc.a<0.004)discard;
+  gl_FragColor=vec4(acc.rgb/acc.a,acc.a);
+}`,
+  transparent:true,depthWrite:false,depthTest:false,side:THREE.BackSide});
+const volMesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),volMat);volMesh.userData.keep=true;volMesh.renderOrder=20;volMesh.frustumCulled=false;
+const _inv=new THREE.Matrix4();
+const _sd=new THREE.Vector3();
+function updateVolCam(){if(!volMesh.parent)return;volMesh.updateMatrixWorld();_inv.copy(volMesh.matrixWorld).invert();volMat.uniforms.uCam.value.copy(camera.position).applyMatrix4(_inv);
+  _sd.copy(SKY.dir).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd)}
+let frameGroup=null,FRAME_LABELS=[];
+function dropFrame(){if(frameGroup){world.remove(frameGroup);disposeTree(frameGroup);frameGroup=null}FRAME_LABELS=[]}
+function buildFrame(G){   // GR2-style wireframe box with height marks every 5 km
+  dropFrame();if(!st.volBox)return;
+  frameGroup=new THREE.Group();world.add(frameGroup);
+  const W=G.nx*G.dx,X0=G.x0,X1=G.x0+W,Z0=-G.y0,Z1=-(G.y0+W),top=G.nz*G.dz,y=h=>st.lift+h*st.exag,pts=[],faint=[];
+  const corners=[[X0,Z0],[X1,Z0],[X1,Z1],[X0,Z1]];
+  for(let i=0;i<4;i++){const[a,b]=corners[i],[c,d]=corners[(i+1)%4];pts.push(a,y(0),b,c,y(0),d,a,y(top),b,c,y(top),d,a,y(0),b,a,y(top),b)}
+  for(let h=5;h<top;h+=5)for(let i=0;i<4;i++){const[a,b]=corners[i],[c,d]=corners[(i+1)%4];faint.push(a,y(h),b,c,y(h),d)}
+  const L=(arr,op)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));return new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0xcfd8e3,transparent:true,opacity:op,fog:false}))};
+  frameGroup.add(L(pts,0.55),L(faint,0.16));
+  for(let h=5;h<=top;h+=5){const sp=label(`${h} km`,X0,Z0,'#cfd8e3');LABELS.pop();sp.position.set(X0-1,y(h),Z0+1);FRAME_LABELS.push(sp);frameGroup.add(sp)}
+}
+function buildVolume(fr){
+  const G=fr.out.grid,W=G.nx*G.dx,H=G.nz*G.dz,u=volMat.uniforms;
+  volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
+  u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
+  u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2}[st.data];u.uMin.value=st.vmin[st.data];
+  u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
+  storm.add(volMesh);
+  if(st.volShells)buildShells(fr);
+  buildFrame(G);
+}
+function freeVolTextures(keep){frames.forEach((f,i)=>{if(Math.abs(i-keep)>1&&f.vtex){for(const t of Object.values(f.vtex))t.dispose();f.vtex=null}})}
+/* keep it smooth: if frames get slow in Volume view, step quality down */
+let fpsT=0,fpsN=0,fpsAcc=0,lastQualityDrop=0;
+function watchFps(now){
+  if(st.view!=='volume'){fpsN=0;fpsAcc=0;fpsT=now;return}
+  const dt=now-fpsT;fpsT=now;if(dt>500)return;fpsAcc+=dt;fpsN++;
+  if(fpsN>=45){const avg=fpsAcc/fpsN;fpsN=0;fpsAcc=0;
+    if(avg>70&&st.volQ!=='low'&&now-lastQualityDrop>4000){lastQualityDrop=now;setQuality(st.volQ==='high'?'med':'low');status(`Volume quality lowered to ${st.volQ==='low'?'Low':'Medium'} to keep it smooth.`);setTimeout(()=>status(null),3500)}}
+}
+function setQuality(q){st.volQ=q;[['low','qLow'],['med','qMed'],['high','qHigh']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===q));
+  try{localStorage.setItem('hist-volq',q)}catch(e){}
+  applyPixelRatio();volMat.uniforms.uSteps.value=VOL_STEPS[q]}
+function applyPixelRatio(){const pr=st.view==='volume'?(st.volQ==='low'?1:st.volQ==='med'?Math.min(devicePixelRatio,1.5):Math.min(devicePixelRatio,2)):Math.min(devicePixelRatio,2);
+  if(renderer.getPixelRatio()!==pr){renderer.setPixelRatio(pr);resize()}}
+function syncVolMin(){const el=$('vMin'),d=st.data;
+  if(d==='z'){el.min=10;el.max=60;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.z+' dBZ'}
+  else if(d==='v'){el.min=5;el.max=40;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.v+' m/s'}
+  else{el.min=0.6;el.max=0.99;el.step=0.01;$('vMinLbl').textContent='Glow below';$('vMinv').textContent=st.vmin.c.toFixed(2)}
+  el.value=st.vmin[d]}
+
+/* ================= controls ================= */
+function drawScale(){const sc=$('scale');sc.innerHTML='';const R=st.data==='z'&&st.view==='volume'&&st.volPal==='gr2'?GR2Z:RAMP[st.data];
+  const[a,b,s]=st.data==='z'?[15,76,1]:st.data==='v'?[-35,35,1]:[0.2,1.05,0.0125];
+  for(let v=a;v<=b;v+=s){const i=document.createElement('i');i.style.background=`rgb(${ramp(R,v).map(Math.round)})`;sc.appendChild(i)}}
+function syncMin(){const m=st.min[st.data][st.view];if(m===undefined)return;const el=$('min');
+  if(st.data==='z'){el.min=10;el.max=70;el.step=1;$('minLbl').textContent='Min dBZ'}
+  else if(st.data==='v'){el.min=5;el.max=40;el.step=1;$('minLbl').textContent='Min speed'}
+  else{el.min=0.5;el.max=1.05;el.step=0.01;$('minLbl').textContent='Max CC'}
+  el.value=m;$('minv').textContent=st.data==='c'?(+m).toFixed(2):m}
+function drawChips(){
+  for(const d of['z','v','c']){const box=$({z:'zChips',v:'vChips',c:'cChips'}[d]);box.querySelectorAll('.chip').forEach(c=>c.remove());
+    for(const[k,name,col]of SHELLS[d]){const b=document.createElement('button');b.className='chip';b.setAttribute('aria-pressed',st.on[d][k]);
+      b.innerHTML=`<i style="background:#${col.toString(16).padStart(6,'0')}"></i>${name}`;b.onclick=()=>{st.on[d][k]=!st.on[d][k];b.setAttribute('aria-pressed',st.on[d][k]);render()};box.appendChild(b)}}}
+function drawOpac(){const box=$('opac');box.innerHTML='';
+  for(const[k,name,c]of SHELLS[st.data]){const id='op_'+st.data+'_'+k,v=st.op[st.data][k];
+    const r=document.createElement('div');r.className='row';
+    r.innerHTML=`<label for="${id}"><i style="background:${st.grey?'#eef1f4':'#'+c.toString(16).padStart(6,'0')}"></i>${name}</label><input id="${id}" type="range" min="0" max="100" step="1" value="${v}"><output>${v===0?'off':v>=100?'solid':v+'%'}</output>`;
+    const inp=r.querySelector('input'),out=r.querySelector('output');
+    inp.oninput=()=>{const n=+inp.value;st.op[st.data][k]=n;out.textContent=n===0?'off':n>=100?'solid':n+'%';later(render)};
+    box.appendChild(r)}}
+function setView(v){const was=st.view;st.view=v;document.body.dataset.view=v;
+  [['radar','vRadar'],['tilts','vTilts'],['blocks','vBlocks'],['shells','vShells'],['volume','vVolume']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===v));
+  if(v==='volume'){let ok=null;try{ok=localStorage.getItem('hist-volwarn')}catch(e){}if(!ok)$('volWarn').hidden=false}
+  applyPixelRatio();syncMin();syncVolMin();drawScale();render();if((v==='radar')!==(was==='radar'))home()}
+function setData(d,quiet){st.data=d;document.body.dataset.data=d;[['z','dZ'],['v','dV'],['c','dC']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===d));
+  topKey='';drawScale();drawOpac();syncMin();syncVolMin();if(!quiet)render()}
+$('vVolume').onclick=()=>setView('volume');$('vRadar').onclick=()=>setView('radar');$('vTilts').onclick=()=>setView('tilts');$('vBlocks').onclick=()=>setView('blocks');$('vShells').onclick=()=>setView('shells');
+$('dZ').onclick=()=>setData('z');$('dV').onclick=()=>setData('v');$('dC').onclick=()=>setData('c');
+let deb=null;const later=f=>{clearTimeout(deb);deb=setTimeout(f,90)};
+$('time').oninput=()=>{st.t=+$('time').value;meta();drawLoadbar();later(render)};
+$('prev').onclick=()=>{if(st.t>0){st.t--;render()}};$('next').onclick=()=>{if(st.t<frames.length-1){st.t++;render()}};
+$('min').oninput=()=>{st.min[st.data][st.view]=+$('min').value;$('minv').textContent=st.data==='c'?(+$('min').value).toFixed(2):$('min').value;later(render)};
+$('spread').oninput=()=>{st.spread=+$('spread').value;$('spreadv').textContent=st.spread;later(render)};
+$('radarOp').oninput=()=>{st.radarOp=+$('radarOp').value;$('radarOpv').textContent=st.radarOp+'%';topPlane.material.opacity=st.radarOp/100};
+$('lift').oninput=()=>{st.lift=+$('lift').value;$('liftv').textContent=st.lift+' km';storm.position.y=st.lift;if(st.view==='volume')later(render)};
+$('exag').oninput=()=>{st.exag=+$('exag').value;$('exagv').textContent=st.exag;storm.scale.y=st.exag;meta();if(st.view==='tilts'||st.view==='volume')later(render)};
+$('cut').oninput=()=>{st.cut=+$('cut').value;clip.constant=-st.cut;if(st.view==='volume')later(render);$('cutv').textContent=st.cut<=-150?'off':(st.cut<0?`${-st.cut} km W`:`${st.cut} km E`)};
+function setCloud(on){st.grey=on;$('grey').setAttribute('aria-pressed',on);$('vCloud').setAttribute('aria-pressed',on);drawOpac();render()}
+$('grey').onclick=()=>setCloud(!st.grey);$('vCloud').onclick=()=>setCloud(!st.grey);
+$('opReset').onclick=()=>{st.op=JSON.parse(JSON.stringify(OP_DEFAULT));drawOpac();render()};
+$('raise').onclick=()=>{st.raise=!st.raise;document.body.classList.toggle('raised',st.raise);$('raise').setAttribute('aria-pressed',st.raise);render();
+  home()};
+$('namesBtn').onclick=()=>{st.names=!st.names;$('namesBtn').setAttribute('aria-pressed',st.names);applyMap()};
+$('mapBtn').onclick=()=>{st.sat=!st.sat;applyMap()};
+$('fold').onclick=()=>{const open=$('fold').getAttribute('aria-expanded')!=='true';$('fold').setAttribute('aria-expanded',open);$('fold').textContent=open?'Hide':'Controls';$('dockBody').hidden=!open};
+let playing=false;
+$('play').onclick=async()=>{playing=!playing;$('play').setAttribute('aria-pressed',playing);$('play').textContent=playing?'Pause':'Play';
+  while(playing){const ready=frames.map((f,i)=>f.state==='ok'?i:-1).filter(i=>i>=0);if(!ready.length){await new Promise(r=>setTimeout(r,500));continue}
+    const nx=ready.find(i=>i>st.t)??ready[0];st.t=nx;render();await new Promise(r=>setTimeout(r,700))}};
+$('spin').onclick=()=>{controls.autoRotate=!controls.autoRotate;$('spin').setAttribute('aria-pressed',controls.autoRotate)};
+/* close-up centre: tap the map */
+$('focusBtn').onclick=()=>{const on=!document.body.classList.contains('picking');document.body.classList.toggle('picking',on);$('focusBtn').setAttribute('aria-pressed',on);
+  if(on){if(st.view!=='radar')setView('radar');status('Tap the map where you want the close-up centred.')}else status(null)};
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);let downAt=null;
+canvas.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY]});
+canvas.addEventListener('pointerup',e=>{
+  if(!document.body.classList.contains('picking')||!downAt||Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1])>8||!session)return;
+  ndc.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(ndc,camera);const p=new THREE.Vector3();if(!ray.ray.intersectPlane(groundPlane,p))return;
+  document.body.classList.remove('picking');$('focusBtn').setAttribute('aria-pressed',false);
+  const dist=Math.hypot(p.x,-p.z);if(dist>150){status('Pick a spot within 150 km of the radar.',true);return}
+  session.focus={x:Math.round(p.x),y:Math.round(-p.z)};$('area').value='close';
+  status(`Rebuilding a 120 km close-up around that spot…`);startSession(session.site,session.list,true);
+});
+function home(){const narrow=innerWidth<600;
+  if(st.view==='radar'&&!st.raise){const fov=camera.fov*Math.PI/360,R=(session&&$('area').value==='close')?70:TOPR*0.75,h=Math.max(R/Math.tan(fov),R/(Math.tan(fov)*camera.aspect));
+    const c=session&&$('area').value==='close'?session.focus:{x:0,y:0};controls.target.set(c.x,0,-c.y);camera.position.set(c.x,h,-c.y+0.01);controls.update();return}
+  const fr=frames[st.t],c=fr&&fr.out?stormCentre(fr):(session?(session.opt.half<100?session.focus:{x:0,y:0}):{x:0,y:0}),s=session?Math.max(0.6,session.opt.half/120):1;
+  controls.target.set(c.x,8,-c.y);camera.position.set(c.x+45*s,(narrow?150:95)*s,-c.y+(narrow?170:115)*s);controls.update()}
+$('reset').onclick=home;
+const ackWarn=q=>{try{localStorage.setItem('hist-volwarn','1')}catch(e){}$('volWarn').hidden=true;setQuality(q);render()};
+$('vwLow').onclick=()=>ackWarn('low');$('vwMed').onclick=()=>ackWarn('med');
+$('qLow').onclick=()=>{setQuality('low');render()};$('qMed').onclick=()=>{setQuality('med');render()};$('qHigh').onclick=()=>{setQuality('high');render()};
+$('vOp').oninput=()=>{st.volOp=+$('vOp').value;$('vOpv').textContent=st.volOp+'%';volMat.uniforms.uOpacity.value=st.volOp/100};
+$('vMin').oninput=()=>{st.vmin[st.data]=+$('vMin').value;syncVolMin();volMat.uniforms.uMin.value=st.vmin[st.data]};
+$('vPal').onclick=()=>{st.volPal=st.volPal==='gr2'?'rs':'gr2';$('vPal').setAttribute('aria-pressed',st.volPal==='gr2');$('vPal').textContent=st.volPal==='gr2'?'GR2 colours':'RadarScope colours';drawScale();render()};
+$('vBox').onclick=()=>{st.volBox=!st.volBox;$('vBox').setAttribute('aria-pressed',st.volBox);render()};
+$('vShell').onclick=()=>{st.volShells=!st.volShells;$('vShell').setAttribute('aria-pressed',st.volShells);render()};
+try{const q=localStorage.getItem('hist-volq');if(q&&VOL_STEPS[q])setQuality(q)}catch(e){}
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();drawScale();drawChips();drawOpac();syncMin();syncVolMin();meta();home();loadSites();
+(function loop(now){requestAnimationFrame(loop);controls.update();updateVolCam();watchFps(now||0);
+  for(const sp of FRAME_LABELS){const d=camera.position.distanceTo(sp.position),h=Math.max(1.8,d*0.018);sp.scale.set(h*sp.userData.aspect,h,1)}
+  for(const sp of LABELS){const d=camera.position.distanceTo(sp.position),h=Math.max(2.2,d*0.022);sp.scale.set(h*sp.userData.aspect,h,1)}
+  renderer.render(scene,camera)})();
+</script>
+<script src="notice.js"></script>
+</body>
+</html>
