@@ -6,7 +6,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#06090d">
-<title>RadixAus · Live Radar</title>
+<title>RadixAus · Live 3D Weather Radar for Australia</title>
+<meta name="description" content="Free live weather radar for Australia in 2D and 3D, with Doppler wind, storm warnings and a storm history replay. Made by Team Twister.">
+<link rel="canonical" href="https://team-twister.github.io/radar/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="RadixAus">
+<meta property="og:title" content="RadixAus · Live 3D Weather Radar for Australia">
+<meta property="og:description" content="Free live weather radar for Australia in 2D and 3D, with Doppler wind, storm warnings and a storm history replay. Made by Team Twister.">
+<meta property="og:url" content="https://team-twister.github.io/radar/">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
@@ -806,16 +813,23 @@ const D2=(()=>{
   async function latestZ(){let t=Math.floor((Date.now()-8*60e3)/3e5)*3e5;for(let k=0;k<10;k++){if(await look(tileURL(0,0,0,isoT(new Date(t)))))return t;t-=3e5}return null}
   async function loadZ(){
     if(o2.src==='rv')return loadRV();
-    if(o2.range!=='nat'){if(zF.kind!=='pic'){for(const f of zF)map2.removeLayer(f.layer);zF.length=0;zF.kind='pic'}
-      if(await loadPics(zF,LETTER[o2.range],+o2.range,'reflectivity'))return true;
-      if(await bomAlive())return false;
-      return fallback2()}
+    /* single-radar view: BoM's per-radar pictures. If they're missing or more than 20 min behind while BoM's own map tiles (what
+       BoM's new website uses) still work, show the map tiles for this area instead of old frames, and re-check the pictures
+       every 5 minutes. */
+    const tilesNow=o2.range!=='nat'&&zF.viaTiles&&Date.now()-zF.viaTiles<5*60e3;
+    if(o2.range!=='nat'&&!tilesNow){if(zF.kind!=='pic'){for(const f of zF)map2.removeLayer(f.layer);zF.length=0;zF.kind='pic'}
+      const okP=await loadPics(zF,LETTER[o2.range],+o2.range,'reflectivity'),age=zF.length?(Date.now()-zF[zF.length-1].t)/6e4:999;
+      if(okP&&age<=20){zF.viaTiles=0;return true}
+      if(!(await bomAlive())){if(okP)return true;return fallback2()}
+      zF.viaTiles=Date.now()}
     if(zF.kind!=='nat'){for(const f of zF)map2.removeLayer(f.layer);zF.length=0;zF.kind='nat';zF.tag=''}
     const newest=await latestZ();if(newest===null)return fallback2();
     const want=[];for(let i=o2.frames-1;i>=0;i--)want.push(newest-i*3e5);
     const keep=new Map(zF.map(f=>[f.t,f]));for(const f of zF)if(!want.includes(f.t))map2.removeLayer(f.layer);
     const next=want.map(t=>keep.get(t)||{t,layer:new Tiles({time:isoT(new Date(t)),pane:'radar',opacity:0,maxNativeZoom:8,maxZoom:11,updateWhenZooming:false,keepBuffer:1})});
-    zF.length=0;zF.push(...next);zF.forEach(f=>{if(!map2.hasLayer(f.layer))f.layer.addTo(map2)});return true;
+    zF.length=0;zF.push(...next);zF.forEach(f=>{if(!map2.hasLayer(f.layer))f.layer.addTo(map2)});
+    if(o2.range!=='nat')status(`BoM's ${site?site.name+' ':''}radar pictures are running late, so this is BoM's live radar map for the same area (the same data BoM's website shows). It will switch back by itself.`,false);
+    return true;
   }
   async function fallback2(){o2.src='rv';head();const ok=await loadRV();if(ok)status(FBMSG,true);return ok}
   const vBounds=(s,km=RKM)=>{const a=km/110.574,b=km/(111.32*Math.cos(s.lat*Math.PI/180));return[[s.lat-a,s.lon-b],[s.lat+a,s.lon+b]]};
@@ -886,7 +900,7 @@ const D2=(()=>{
   async function refresh(full){
     const atEnd=cur>=F().length-1;
     if(st.view!=='2d')return b3load(full);
-    if(o2.product==='z'){if(full||!zF.length)status('Loading BoM reflectivity…');if(await loadZ()&&o2.src==='bom')status(null)}else await loadV();
+    if(o2.product==='z'){if(full||!zF.length)status('Loading BoM reflectivity…');if(await loadZ()&&o2.src==='bom'&&!(o2.range!=='nat'&&zF.viaTiles))status(null)}else await loadV();
     if(full||atEnd)show(F().length-1);else show(cur);
   }
   function head(){
