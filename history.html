@@ -588,9 +588,11 @@ async function loadSites(){
 }
 /* ---- presets: famous storms, one tap fills in the radar, day and window (times are Brisbane time) ---- */
 const PRESET_TZ='Australia/Brisbane';
+// format for every preset: name = where it happened + type of storm; note = 'Confirmed tornado' if there was one, otherwise empty
 const PRESETS=[
   {name:'Gympie supercell',note:'Confirmed tornado',site:8,date:'2025-11-24',from:'15:30',to:'17:25'},
   {name:'Brisbane supercell',note:'',site:66,date:'2025-10-26',from:'15:30',to:'17:25'},
+  {name:'Yarrawonga supercell',note:'Confirmed tornado',site:49,date:'2019-09-06',from:'15:45',to:'16:55'},
 ];
 let presetPending=null;
 function drawPresets(){const box=$('presets');box.innerHTML='';
