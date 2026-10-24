@@ -233,10 +233,10 @@ body.picking #scene{cursor:crosshair}
     <div class="chips" data-views="volume"><span class="lbl">Quality</span><button class="chip sel" id="qLow" aria-pressed="false">Low</button><button class="chip sel" id="qMed" aria-pressed="true">Medium</button><button class="chip sel" id="qHigh" aria-pressed="false">High</button></div>
     <div class="row" data-views="volume"><label for="vOp">Fog density</label><input id="vOp" type="range" min="10" max="100" value="40"><output id="vOpv">40%</output></div>
     <div class="row" data-views="volume"><label for="vMin" id="vMinLbl">Glow from</label><input id="vMin" type="range" min="10" max="60" value="25"><output id="vMinv">25</output></div>
-    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="solid">Solid (GR2)</button><button class="chip sel" data-look="surf">Shells</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="band">Banded</button><button class="chip sel" data-look="glow">Glow</button></div>
+    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="solid">Solid (GR2)</button><button class="chip sel" data-look="paint">Painted</button><button class="chip sel" data-look="surf">Shells</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="band">Banded</button><button class="chip sel" data-look="glow">Glow</button></div>
     <div class="chips" data-views="volume" id="lightRow"><span class="lbl">Light from</span><button class="chip sel" id="lEye">Camera</button><button class="chip sel" id="lSun">Sun</button></div>
     <div class="row" data-views="volume" id="difRow"><label for="vDif">Shading</label><input id="vDif" type="range" min="0" max="100" value="65"><output id="vDifv">65%</output></div>
-    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button><button class="chip sel" id="vFloor">Radar on floor</button><button class="chip sel" id="vBlack">Black background</button></div>
+    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button><button class="chip sel" id="vSmooth">Smooth</button><button class="chip sel" id="vFloor">Radar on floor</button><button class="chip sel" id="vBlack">Black background</button></div>
     <div class="note warnnote" data-views="volume">Volume render is heavy on older phones. If it stutters, pick Low.</div>
     <div class="chips shellchips" id="zChips"><span class="lbl">dBZ shells</span></div>
     <div class="chips shellchips" id="vChips"><span class="lbl">Wind shells</span></div>
@@ -289,10 +289,10 @@ LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
 
 const $=id=>document.getElementById(id);
 function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
-const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4};
-const VM=()=>st.volLook==='solid'?st.vminS:st.vmin;   // the Solid look has its own surface strength (GR2 users usually pick 40-50 dBZ)
+const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4,paint:5};
+const VM=()=>st.volLook==='solid'||st.volLook==='paint'?st.vminS:st.vmin;   // the Solid look has its own surface strength (GR2 users usually pick 40-50 dBZ)
 const sget=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},sset=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const st={volLook:sget('hist-vlook2','solid'),volLight:sget('hist-vlight','eye'),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volBlack:sget('hist-vblack','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+const st={volLook:sget('hist-vlook2','solid'),volLight:sget('hist-vlight','eye'),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volBlack:sget('hist-vblack','1')==='1',volSmooth:sget('hist-vsmooth','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
   op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
   on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
 const SHELLS={
@@ -859,9 +859,17 @@ function lutTex(field,pal){const key=field+pal;if(lutCache[key])return lutCache[
   const t=new THREE.DataTexture(d,256,1,THREE.RGBAFormat);t.needsUpdate=true;t.magFilter=t.minFilter=THREE.LinearFilter;return lutCache[key]=t}
 function tex3(data,G){const t=new THREE.DataTexture3D(data,G.nx,G.ny,G.nz);t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;
   t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return t}
-function volTex(fr,field){fr.vtex=fr.vtex||{};if(fr.vtex[field])return fr.vtex[field];const G=fr.out.grid;let d=volOf(fr.out,field);
+/* "Smooth": softens the blocky steps between the 1 km cells before drawing (a small 3x3x3 average, empty air left empty) */
+function smooth3(src,G,fillv){const nx=G.nx,ny=G.ny,nz=G.nz,N2=nx*ny,o=new Uint8Array(src.length),a=new Float32Array(src.length),b=new Float32Array(src.length);
+  const val=i=>src[i]?src[i]:fillv;
+  for(let k=0;k<nz;k++)for(let j=0;j<ny;j++){const r=k*N2+j*nx;for(let i=0;i<nx;i++){let s=0,n=0;for(let d=-1;d<=1;d++){const ii=i+d;if(ii<0||ii>=nx)continue;s+=val(r+ii);n++}a[r+i]=s/n}}
+  for(let k=0;k<nz;k++)for(let i=0;i<nx;i++)for(let j=0;j<ny;j++){let s=0,n=0;for(let d=-1;d<=1;d++){const jj=j+d;if(jj<0||jj>=ny)continue;s+=a[k*N2+jj*nx+i];n++}b[k*N2+j*nx+i]=s/n}
+  for(let k=0;k<nz;k++)for(let x=0;x<N2;x++){let s=0,n=0;for(let d=-1;d<=1;d++){const kk=k+d;if(kk<0||kk>=nz)continue;s+=b[kk*N2+x];n++}const v=s/n;o[k*N2+x]=v<fillv+0.5&&!src[k*N2+x]?0:Math.max(1,Math.min(255,Math.round(v)))}
+  return o}
+function volTex(fr,field){const tk=field+(st.volSmooth?'s':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
+  if(st.volSmooth)d=smooth3(d,G,field==='z'?0:{v:64,r:64,c:200,w:1,d:121,k:41}[field]);
   if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
-  return fr.vtex[field]=tex3(d,G)}
+  return fr.vtex[tk]=tex3(d,G)}
 const volMat=new THREE.ShaderMaterial({
   uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)},uAmb:{value:0.35}},
   vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
@@ -891,7 +899,7 @@ void main(){
   float dt=1.0/uSteps;float t=b.x+dt*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
   vec4 acc=vec4(0.0);
   vec3 vd=normalize(d*uScale);   // view direction in real-world proportions
-  if(uCloud==0&&uLook==4){   // SOLID (GR2 style): one solid skin at the slider's strength, one colour, lit by diffuse + ambient light
+  if(uCloud==0&&(uLook==4||uLook==5)){   // SOLID (4) / PAINTED (5) (GR2 style): one solid skin at the slider's strength, one colour, lit by diffuse + ambient light
     bool first=true;
     for(int i=0;i<1400;i++){
       if(t>b.y)break;
@@ -905,6 +913,9 @@ void main(){
         vec3 ph=uCam+d*hi,th=vec3(ph.x+0.5,0.5-ph.z,ph.y+0.5);float q2;strength(th,q2);
         vec3 n=normalAt(th);if(dot(n,vd)>0.0)n=-n;
         vec3 base=uField==0?lut(uMin+32.0):lut(q2);
+        if(uLook==5){   // PAINTED: colour the skin by the strongest value just inside it (~1.5 km in), so cores show through as red/pink patches
+          float best=q2,bs=-99.0;for(int k=1;k<=6;k++){vec3 pk=ph+d*(dt*float(k));vec3 tk=vec3(pk.x+0.5,0.5-pk.z,pk.y+0.5);float qk;float sk=strength(tk,qk);if(sk>bs){bs=sk;best=qk;}}
+          base=lut(best);}
         float dif=dot(n,n)>0.5?max(dot(n,normalize(uLight)),0.0):0.6;
         gl_FragColor=vec4(base*(uAmb+(1.0-uAmb)*dif),1.0);return;}
       first=false;t+=dt;}
@@ -924,11 +935,13 @@ void main(){
       prev=s;t+=dt;}
     if(acc.a<0.004)discard;gl_FragColor=vec4(acc.rgb/acc.a,acc.a);return;}
   if(uCloud==0&&(uLook==1||uLook==2)){   // LIT / BANDED: fog that's lit by the sun, denser so storms look solid
+    bool cut=false;
     for(int i=0;i<1400;i++){
       if(t>b.y||acc.a>0.97)break;
       vec3 p=uCam+d*t;t+=dt;
-      if(p.x<uCut)continue;
+      if(p.x<uCut){cut=true;continue;}
       vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);float lq;float s=strength(tc,lq);
+      if(cut){cut=false;if(s>-12.0){vec3 cc=lut(lq)*(uAmb+(1.0-uAmb)*0.8);float ca=0.92;acc.rgb+=(1.0-acc.a)*ca*cc;acc.a+=(1.0-acc.a)*ca;continue;}}   // the cut face: a crisp slice through the storm
       if(s<0.0)continue;
       float a=smoothstep(0.0,3.0,s)*(0.05+0.95*pow(clamp(s/28.0,0.0,1.0),1.6));   // light rain nearly see-through, cores solid
       a=clamp(a*uOpacity*dt*60.0*3.0,0.0,1.0);if(a<0.002)continue;
@@ -936,11 +949,14 @@ void main(){
       vec3 c=shade(lut(lq),normalAt(tc),vd);
       acc.rgb+=(1.0-acc.a)*a*c;acc.a+=(1.0-acc.a)*a;}
     if(acc.a<0.004)discard;gl_FragColor=vec4(acc.rgb/acc.a,acc.a);return;}
+  bool cut0=false;
   for(int i=0;i<1400;i++){
     if(t>b.y||acc.a>0.97)break;
     vec3 p=uCam+d*t;t+=dt;
-    if(p.x<uCut)continue;
+    if(p.x<uCut){cut0=true;continue;}
     vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);
+    if(cut0&&uCloud==0){cut0=false;float lq;float s=strength(tc,lq);if(s>-12.0){float ca=0.9;acc.rgb+=(1.0-acc.a)*ca*lut(lq);acc.a+=(1.0-acc.a)*ca;continue;}}   // the cut face, as a coloured slice
+    cut0=false;
     float zq=texture(uZ,tc).r*255.0;float dbz=zq-32.0;float a=0.0;vec3 col=vec3(0.0);
     if(uCloud==1){   // cloud: white where the sun reaches, grey where the storm shades itself
       a=smoothstep(uMin-6.0,uMin+6.0,dbz)*(0.45+0.55*clamp((dbz-uMin)/35.0,0.0,1.0));
@@ -1016,7 +1032,7 @@ function syncVolMin(){const el=$('vMin'),d=st.data;
   else if(d==='d'){el.min=-1;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM().d+' dB'}
   else if(d==='k'){el.min=0;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM().k+' °/km'}
   else{el.min=0.6;el.max=0.99;el.step=0.01;$('vMinLbl').textContent='Glow below';$('vMinv').textContent=VM().c.toFixed(2)}
-  el.value=VM()[d];if(st.volLook==='solid')$('vMinLbl').textContent='Surface at'}
+  el.value=VM()[d];if(st.volLook==='solid'||st.volLook==='paint')$('vMinLbl').textContent='Surface at'}
 
 /* ================= controls ================= */
 function drawScale(){const sc=$('scale');sc.innerHTML='';const R=st.data==='z'&&st.view==='volume'&&st.volPal==='gr2'?GR2Z:RAMP[st.data];
@@ -1112,10 +1128,11 @@ $('vOp').oninput=()=>{st.volOp=+$('vOp').value;$('vOpv').textContent=st.volOp+'%
 $('vMin').oninput=()=>{VM()[st.data]=+$('vMin').value;syncVolMin();volMat.uniforms.uMin.value=VM()[st.data]};
 function syncLook(){document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.look===st.volLook));
   $('lEye').setAttribute('aria-pressed',st.volLight==='eye');$('lSun').setAttribute('aria-pressed',st.volLight==='sun');$('vDif').value=st.volDif;$('vDifv').textContent=st.volDif+'%';
-  $('vFloor').setAttribute('aria-pressed',st.volFloor);$('vBlack').setAttribute('aria-pressed',st.volBlack);
-  $('lightRow').hidden=$('difRow').hidden=st.volLook==='glow';$('vMinLbl').textContent=st.volLook==='solid'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
+  $('vFloor').setAttribute('aria-pressed',st.volFloor);$('vSmooth').setAttribute('aria-pressed',st.volSmooth);$('vBlack').setAttribute('aria-pressed',st.volBlack);
+  $('lightRow').hidden=$('difRow').hidden=st.volLook==='glow';$('vMinLbl').textContent=st.volLook==='solid'||st.volLook==='paint'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
 $('lEye').onclick=()=>{st.volLight='eye';sset('hist-vlight','eye');syncLook();render()};$('lSun').onclick=()=>{st.volLight='sun';sset('hist-vlight','sun');syncLook();render()};
 $('vDif').oninput=()=>{st.volDif=+$('vDif').value;sset('hist-vdif',st.volDif);$('vDifv').textContent=st.volDif+'%';volMat.uniforms.uAmb.value=1-st.volDif/100};
+$('vSmooth').onclick=()=>{st.volSmooth=!st.volSmooth;sset('hist-vsmooth',st.volSmooth?'1':'0');syncLook();render()};
 $('vFloor').onclick=()=>{st.volFloor=!st.volFloor;sset('hist-vfloor',st.volFloor?'1':'0');syncLook();render()};
 $('vBlack').onclick=()=>{st.volBlack=!st.volBlack;sset('hist-vblack',st.volBlack?'1':'0');syncLook();render()};
 document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;sset('hist-vlook2',st.volLook);syncLook();syncVolMin();render()});syncLook();
