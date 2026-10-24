@@ -233,8 +233,10 @@ body.picking #scene{cursor:crosshair}
     <div class="chips" data-views="volume"><span class="lbl">Quality</span><button class="chip sel" id="qLow" aria-pressed="false">Low</button><button class="chip sel" id="qMed" aria-pressed="true">Medium</button><button class="chip sel" id="qHigh" aria-pressed="false">High</button></div>
     <div class="row" data-views="volume"><label for="vOp">Fog density</label><input id="vOp" type="range" min="10" max="100" value="40"><output id="vOpv">40%</output></div>
     <div class="row" data-views="volume"><label for="vMin" id="vMinLbl">Glow from</label><input id="vMin" type="range" min="10" max="60" value="25"><output id="vMinv">25</output></div>
-    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="glow">Glow</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="band">Banded</button><button class="chip sel" data-look="surf">Surfaces</button></div>
-    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button></div>
+    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="solid">Solid (GR2)</button><button class="chip sel" data-look="surf">Shells</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="band">Banded</button><button class="chip sel" data-look="glow">Glow</button></div>
+    <div class="chips" data-views="volume" id="lightRow"><span class="lbl">Light from</span><button class="chip sel" id="lEye">Camera</button><button class="chip sel" id="lSun">Sun</button></div>
+    <div class="row" data-views="volume" id="difRow"><label for="vDif">Shading</label><input id="vDif" type="range" min="0" max="100" value="65"><output id="vDifv">65%</output></div>
+    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button><button class="chip sel" id="vFloor">Radar on floor</button><button class="chip sel" id="vBlack">Black background</button></div>
     <div class="note warnnote" data-views="volume">Volume render is heavy on older phones. If it stutters, pick Low.</div>
     <div class="chips shellchips" id="zChips"><span class="lbl">dBZ shells</span></div>
     <div class="chips shellchips" id="vChips"><span class="lbl">Wind shells</span></div>
@@ -287,8 +289,10 @@ LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
 
 const $=id=>document.getElementById(id);
 function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
-const VLOOK={glow:0,lit:1,band:2,surf:3};
-const st={volLook:(()=>{try{return localStorage.getItem('hist-vlook')||'lit'}catch(e){return'lit'}})(),volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4};
+const VM=()=>st.volLook==='solid'?st.vminS:st.vmin;   // the Solid look has its own surface strength (GR2 users usually pick 40-50 dBZ)
+const sget=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},sset=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const st={volLook:sget('hist-vlook2','solid'),volLight:sget('hist-vlight','eye'),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volBlack:sget('hist-vblack','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
   op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
   on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
 const SHELLS={
@@ -818,6 +822,8 @@ function rebuild(i){if(rebuilding.has(i))return rebuilding.get(i);const fr=frame
     if(sess!==session||frames[i]!==fr)return;fr.out=r.out;fr.meta=r.meta;if(Math.abs(i-st.t)>FULL_WIN&&isLong())lighten(fr)})()
     .catch(e=>{if(!sess.abort.signal.aborted)fr.err=e.message}).finally(()=>rebuilding.delete(i));
   rebuilding.set(i,p);return p}
+let blackOn=false;const BLACK=new THREE.Color(0x0b0b0d);
+function skyMode(black){if(black){scene.background=BLACK;scene.fog.color.copy(BLACK);blackOn=true}else if(blackOn){blackOn=false;SKY.key='';skyNow()}}
 function render(){
   meta();if(session&&frames[st.t])applySky(frames[st.t].entry.time,session.site);drawLoadbar();$('time').value=st.t;
   const fr=frames[st.t];
@@ -831,12 +837,13 @@ function render(){
   if(satMesh)satMesh.material.color.setScalar(groundLevel());satBright();if(SAT.mode==='sweep')satSweep();
   const radar=st.view==='radar';
   TOPR=Math.min(150,(fr.out.polar.r0+fr.out.polar.rs*(fr.out.polar.z?fr.out.polar.z.nbins:0))/1000||150);
-  topPlane.visible=radar;
+  const floor=radar||(st.view==='volume'&&st.volFloor);topPlane.visible=floor;   // GR2 style: the flat radar on the floor under the 3D storm
+  skyMode(st.view==='volume'&&st.volBlack);
   if(isX(st.data)&&!(fr.out.extra||[]).includes(st.data))status(`This scan has no ${XINFO[st.data][1]}, so it shows reflectivity instead.`,true);
   else if(isX(st.data)&&st.view==='shells')status(`Shells are only made for dBZ, Vel and CC, so these are dBZ shells. Try Tilts, Blocks or Volume for ${XINFO[st.data][0]}.`);
-  if(radar){const key=`${st.t}|${st.data}`;if(key!==topKey){if(topTex)topTex.dispose();topTex=polarTexture(fr,st.data)||polarTexture(fr,'z');topKey=key}
-    topPlane.material.map=topTex;topPlane.material.opacity=st.radarOp/100;topPlane.material.needsUpdate=true;topPlane.scale.set(TOPR*2,TOPR*2,1);
-    if(st.raise)buildShells(fr)}
+  if(floor){const key=`${st.t}|${st.data}`;if(key!==topKey){if(topTex)topTex.dispose();topTex=polarTexture(fr,st.data)||polarTexture(fr,'z');topKey=key}
+    topPlane.material.map=topTex;topPlane.material.opacity=st.radarOp/100;topPlane.material.needsUpdate=true;topPlane.scale.set(TOPR*2,TOPR*2,1)}
+  if(radar){if(st.raise)buildShells(fr)}
   else{const want=st.data,miss=isX(want)&&!(fr.out.extra||[]).includes(want);if(miss)st.data='z';   // this scan doesn't have the extra product: draw dBZ
     try{if(st.view==='blocks')buildBlocks(fr.out);else if(st.view==='tilts')buildTilts(fr.out);else if(st.view==='volume')buildVolume(fr);else buildShells(fr)}finally{st.data=want}}
   storm.scale.y=st.exag;storm.position.y=st.lift;
@@ -856,11 +863,11 @@ function volTex(fr,field){fr.vtex=fr.vtex||{};if(fr.vtex[field])return fr.vtex[f
   if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
   return fr.vtex[field]=tex3(d,G)}
 const volMat=new THREE.ShaderMaterial({
-  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)}},
+  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)},uAmb:{value:0.35}},
   vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`precision highp float;precision highp sampler3D;
 uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform vec2 uDec;uniform float uRange;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
-uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;
+uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;uniform float uAmb;
 /* strength of what's shown at a point, on a common scale: 0 = just visible (the slider), ~20+ = strong.
    lq returns the colour-table index for that point. */
 float strength(vec3 tc,out float lq){float zq=texture(uZ,tc).r*255.0;float dbz=zq-32.0;
@@ -874,9 +881,9 @@ float strengthOnly(vec3 tc){float q;return strength(tc,q);}
 vec3 normalAt(vec3 tc){vec3 g=vec3(strengthOnly(tc+vec3(uVox.x,0,0))-strengthOnly(tc-vec3(uVox.x,0,0)),
     strengthOnly(tc+vec3(0,uVox.y,0))-strengthOnly(tc-vec3(0,uVox.y,0)),strengthOnly(tc+vec3(0,0,uVox.z))-strengthOnly(tc-vec3(0,0,uVox.z)));
   vec3 n=vec3(g.x/uScale.x,g.z/uScale.y,-g.y/uScale.z);float m=length(n);return m>1e-5?-n/m:vec3(0.0);}
-vec3 shade(vec3 base,vec3 n,vec3 vd){if(dot(n,n)<0.5)return base*0.85;vec3 L=normalize(uLight);
+vec3 shade(vec3 base,vec3 n,vec3 vd){if(dot(n,n)<0.5)return base*(uAmb+(1.0-uAmb)*0.6);vec3 L=normalize(uLight);
   float dif=max(dot(n,L),0.0),wrap=max(dot(n,L)*0.5+0.5,0.0),sp=pow(max(dot(reflect(-L,n),-vd),0.0),24.0);
-  return base*(0.28+0.42*wrap+0.45*dif)+vec3(0.22*sp);}
+  return base*(uAmb+(1.0-uAmb)*(0.55*dif+0.55*wrap))+vec3(0.18*sp*(1.0-uAmb));}
 vec3 lut(float q){return texture(uLut,vec2((q+0.5)/256.0,0.5)).rgb;}
 vec2 hitBox(vec3 o,vec3 d){vec3 inv=1.0/d;vec3 t0=(vec3(-0.5)-o)*inv;vec3 t1=(vec3(0.5)-o)*inv;vec3 a=min(t0,t1);vec3 b=max(t0,t1);return vec2(max(max(a.x,a.y),a.z),min(min(b.x,b.y),b.z));}
 void main(){
@@ -884,6 +891,24 @@ void main(){
   float dt=1.0/uSteps;float t=b.x+dt*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
   vec4 acc=vec4(0.0);
   vec3 vd=normalize(d*uScale);   // view direction in real-world proportions
+  if(uCloud==0&&uLook==4){   // SOLID (GR2 style): one solid skin at the slider's strength, one colour, lit by diffuse + ambient light
+    bool first=true;
+    for(int i=0;i<1400;i++){
+      if(t>b.y)break;
+      vec3 p=uCam+d*t;
+      if(p.x<uCut){t+=dt;first=true;continue;}
+      vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);float lq;float s=strength(tc,lq);
+      if(s>=0.0){
+        if(first){   // the ray starts inside the storm (a cut or the box edge): show the colours inside, flat
+          gl_FragColor=vec4(lut(lq)*(uAmb+(1.0-uAmb)*0.75),1.0);return;}
+        float lo=t-dt,hi=t;for(int k=0;k<6;k++){float m=(lo+hi)*0.5;vec3 pm=uCam+d*m;if(strengthOnly(vec3(pm.x+0.5,0.5-pm.z,pm.y+0.5))>=0.0)hi=m;else lo=m;}
+        vec3 ph=uCam+d*hi,th=vec3(ph.x+0.5,0.5-ph.z,ph.y+0.5);float q2;strength(th,q2);
+        vec3 n=normalAt(th);if(dot(n,vd)>0.0)n=-n;
+        vec3 base=uField==0?lut(uMin+32.0):lut(q2);
+        float dif=dot(n,n)>0.5?max(dot(n,normalize(uLight)),0.0):0.6;
+        gl_FragColor=vec4(base*(uAmb+(1.0-uAmb)*dif),1.0);return;}
+      first=false;t+=dt;}
+    discard;}
   if(uCloud==0&&uLook==3){   // SURFACES: three nested skins (outer see-through, inner solid), lit like solid objects
     float prev=-99.0;
     for(int i=0;i<1400;i++){
@@ -942,7 +967,10 @@ const _inv=new THREE.Matrix4();
 const _sd=new THREE.Vector3();
 function updateVolCam(){if(!volMesh.parent)return;volMesh.updateMatrixWorld();_inv.copy(volMesh.matrixWorld).invert();volMat.uniforms.uCam.value.copy(camera.position).applyMatrix4(_inv);
   _sd.copy(SKY.dir).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd);
-  volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize()}   // light for the lit looks: the sun, kept fairly high so storms never go black
+  if(st.volLight==='eye'){camera.getWorldDirection(_fw);_up.copy(camera.up).applyQuaternion(camera.quaternion);_rt.crossVectors(_fw,_up).normalize();
+    volMat.uniforms.uLight.value.copy(_fw).multiplyScalar(-1).addScaledVector(_up,0.55).addScaledVector(_rt,-0.35).normalize()}   // like GR2's "eye space": light comes from just above-left of you
+  else volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize()}
+const _fw=new THREE.Vector3(),_up=new THREE.Vector3(),_rt=new THREE.Vector3();   // light for the lit looks: the sun, kept fairly high so storms never go black
 let frameGroup=null,FRAME_LABELS=[];
 function dropFrame(){if(frameGroup){world.remove(frameGroup);disposeTree(frameGroup);frameGroup=null}FRAME_LABELS=[]}
 function buildFrame(G){   // GR2-style wireframe box with height marks every 5 km
@@ -955,13 +983,14 @@ function buildFrame(G){   // GR2-style wireframe box with height marks every 5 k
   const L=(arr,op)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));return new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0xcfd8e3,transparent:true,opacity:op,fog:false}))};
   frameGroup.add(L(pts,0.55),L(faint,0.16));
   for(let h=5;h<=top;h+=5){const sp=label(`${h} km`,X0,Z0,'#cfd8e3');LABELS.pop();sp.position.set(X0-1,y(h),Z0+1);FRAME_LABELS.push(sp);frameGroup.add(sp)}
+  const mx=(X0+X1)/2,mz=(Z0+Z1)/2;for(const[txt,px,pz]of[['NORTH',mx,Z1],['SOUTH',mx,Z0],['EAST',X1,mz],['WEST',X0,mz]]){const sp=label(txt,px,pz,'#e8eef5');LABELS.pop();sp.position.set(px,y(0)+0.4,pz);FRAME_LABELS.push(sp);frameGroup.add(sp)}   // compass words on the floor, like GR2
 }
 function buildVolume(fr){
   const G=fr.out.grid,W=G.nx*G.dx,H=G.nz*G.dz,u=volMat.uniforms;
   volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
   u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
-  u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=st.vmin[st.data];
-  u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uLook.value=VLOOK[st.volLook];u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
+  u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=VM()[st.data];
+  u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
   storm.add(volMesh);
   if(st.volShells)buildShells(fr);
   buildFrame(G);
@@ -981,13 +1010,13 @@ function setQuality(q){st.volQ=q;[['low','qLow'],['med','qMed'],['high','qHigh']
 function applyPixelRatio(){const pr=st.view==='volume'?(st.volQ==='low'?1:st.volQ==='med'?Math.min(devicePixelRatio,1.5):Math.min(devicePixelRatio,2)):Math.min(devicePixelRatio,2);
   if(renderer.getPixelRatio()!==pr){renderer.setPixelRatio(pr);resize()}}
 function syncVolMin(){const el=$('vMin'),d=st.data;
-  if(d==='z'){el.min=10;el.max=60;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.z+' dBZ'}
-  else if(d==='v'||d==='r'){el.min=5;el.max=40;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin[d]+' m/s'}
-  else if(d==='w'){el.min=1;el.max=15;el.step=0.5;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.w+' m/s'}
-  else if(d==='d'){el.min=-1;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.d+' dB'}
-  else if(d==='k'){el.min=0;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.k+' °/km'}
-  else{el.min=0.6;el.max=0.99;el.step=0.01;$('vMinLbl').textContent='Glow below';$('vMinv').textContent=st.vmin.c.toFixed(2)}
-  el.value=st.vmin[d]}
+  if(d==='z'){el.min=10;el.max=60;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM().z+' dBZ'}
+  else if(d==='v'||d==='r'){el.min=5;el.max=40;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM()[d]+' m/s'}
+  else if(d==='w'){el.min=1;el.max=15;el.step=0.5;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM().w+' m/s'}
+  else if(d==='d'){el.min=-1;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM().d+' dB'}
+  else if(d==='k'){el.min=0;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=VM().k+' °/km'}
+  else{el.min=0.6;el.max=0.99;el.step=0.01;$('vMinLbl').textContent='Glow below';$('vMinv').textContent=VM().c.toFixed(2)}
+  el.value=VM()[d];if(st.volLook==='solid')$('vMinLbl').textContent='Surface at'}
 
 /* ================= controls ================= */
 function drawScale(){const sc=$('scale');sc.innerHTML='';const R=st.data==='z'&&st.view==='volume'&&st.volPal==='gr2'?GR2Z:RAMP[st.data];
@@ -1080,9 +1109,16 @@ const ackWarn=q=>{try{localStorage.setItem('hist-volwarn','1')}catch(e){}$('volW
 $('vwLow').onclick=()=>ackWarn('low');$('vwMed').onclick=()=>ackWarn('med');
 $('qLow').onclick=()=>{setQuality('low');render()};$('qMed').onclick=()=>{setQuality('med');render()};$('qHigh').onclick=()=>{setQuality('high');render()};
 $('vOp').oninput=()=>{st.volOp=+$('vOp').value;$('vOpv').textContent=st.volOp+'%';volMat.uniforms.uOpacity.value=st.volOp/100};
-$('vMin').oninput=()=>{st.vmin[st.data]=+$('vMin').value;syncVolMin();volMat.uniforms.uMin.value=st.vmin[st.data]};
-function syncLook(){document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.look===st.volLook))}
-document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;try{localStorage.setItem('hist-vlook',st.volLook)}catch(e){}syncLook();render()});syncLook();
+$('vMin').oninput=()=>{VM()[st.data]=+$('vMin').value;syncVolMin();volMat.uniforms.uMin.value=VM()[st.data]};
+function syncLook(){document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.look===st.volLook));
+  $('lEye').setAttribute('aria-pressed',st.volLight==='eye');$('lSun').setAttribute('aria-pressed',st.volLight==='sun');$('vDif').value=st.volDif;$('vDifv').textContent=st.volDif+'%';
+  $('vFloor').setAttribute('aria-pressed',st.volFloor);$('vBlack').setAttribute('aria-pressed',st.volBlack);
+  $('lightRow').hidden=$('difRow').hidden=st.volLook==='glow';$('vMinLbl').textContent=st.volLook==='solid'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
+$('lEye').onclick=()=>{st.volLight='eye';sset('hist-vlight','eye');syncLook();render()};$('lSun').onclick=()=>{st.volLight='sun';sset('hist-vlight','sun');syncLook();render()};
+$('vDif').oninput=()=>{st.volDif=+$('vDif').value;sset('hist-vdif',st.volDif);$('vDifv').textContent=st.volDif+'%';volMat.uniforms.uAmb.value=1-st.volDif/100};
+$('vFloor').onclick=()=>{st.volFloor=!st.volFloor;sset('hist-vfloor',st.volFloor?'1':'0');syncLook();render()};
+$('vBlack').onclick=()=>{st.volBlack=!st.volBlack;sset('hist-vblack',st.volBlack?'1':'0');syncLook();render()};
+document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;sset('hist-vlook2',st.volLook);syncLook();syncVolMin();render()});syncLook();
 $('vPal').onclick=()=>{st.volPal=st.volPal==='gr2'?'rs':'gr2';$('vPal').setAttribute('aria-pressed',st.volPal==='gr2');$('vPal').textContent=st.volPal==='gr2'?'GR2 colours':'RadarScope colours';drawScale();render()};
 $('vBox').onclick=()=>{st.volBox=!st.volBox;$('vBox').setAttribute('aria-pressed',st.volBox);render()};
 $('vShell').onclick=()=>{st.volShells=!st.volShells;$('vShell').setAttribute('aria-pressed',st.volShells);render()};
