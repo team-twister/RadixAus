@@ -289,7 +289,7 @@ LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
 const $=id=>document.getElementById(id);
 function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
 const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4,paint:5,cloud:0};
-/* Cloud look: smoothing, black background and sun light are on only for it (and it only works with dBZ) */
+/* Cloud look: smoothing, the realistic sky and sun light are on only for it (and it only works with dBZ); everything else has a black background */
 function cloudOn(){return st.volLook==='cloud'&&st.data==='z'}
 const VM=()=>st.volLook==='solid'||st.volLook==='paint'?st.vminS:st.vmin;   // the Solid look has its own surface strength (GR2 users usually pick 40-50 dBZ)
 const sget=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},sset=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
@@ -839,7 +839,7 @@ function render(){
   const radar=st.view==='radar';
   TOPR=Math.min(150,(fr.out.polar.r0+fr.out.polar.rs*(fr.out.polar.z?fr.out.polar.z.nbins:0))/1000||150);
   const floor=radar||(st.view==='volume'&&st.volFloor);topPlane.visible=floor;   // GR2 style: the flat radar on the floor under the 3D storm
-  skyMode(st.view==='volume'&&cloudOn());
+  skyMode(!(st.view==='volume'&&cloudOn()));   // black background everywhere; the realistic sky only with the Cloud look
   if(st.view==='volume'&&st.volLook==='cloud'&&st.data!=='z')status('Cloud look only works with dBZ, so this shows Glow.');
   if(isX(st.data)&&!(fr.out.extra||[]).includes(st.data))status(`This scan has no ${XINFO[st.data][1]}, so it shows reflectivity instead.`,true);
   else if(isX(st.data)&&st.view==='shells')status(`Shells are only made for dBZ, Vel and CC, so these are dBZ shells. Try Tilts, Blocks or Volume for ${XINFO[st.data][0]}.`);
