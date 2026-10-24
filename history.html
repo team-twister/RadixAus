@@ -233,6 +233,7 @@ body.picking #scene{cursor:crosshair}
     <div class="chips" data-views="volume"><span class="lbl">Quality</span><button class="chip sel" id="qLow" aria-pressed="false">Low</button><button class="chip sel" id="qMed" aria-pressed="true">Medium</button><button class="chip sel" id="qHigh" aria-pressed="false">High</button></div>
     <div class="row" data-views="volume"><label for="vOp">Fog density</label><input id="vOp" type="range" min="10" max="100" value="40"><output id="vOpv">40%</output></div>
     <div class="row" data-views="volume"><label for="vMin" id="vMinLbl">Glow from</label><input id="vMin" type="range" min="10" max="60" value="25"><output id="vMinv">25</output></div>
+    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="glow">Glow</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="band">Banded</button><button class="chip sel" data-look="surf">Surfaces</button></div>
     <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button></div>
     <div class="note warnnote" data-views="volume">Volume render is heavy on older phones. If it stutters, pick Low.</div>
     <div class="chips shellchips" id="zChips"><span class="lbl">dBZ shells</span></div>
@@ -286,7 +287,8 @@ LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
 
 const $=id=>document.getElementById(id);
 function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
-const st={volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+const VLOOK={glow:0,lit:1,band:2,surf:3};
+const st={volLook:(()=>{try{return localStorage.getItem('hist-vlook')||'lit'}catch(e){return'lit'}})(),volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
   op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
   on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
 const SHELLS={
@@ -714,7 +716,7 @@ async function startSession(site,list,keepFocus,tzForce){
   }
 }
 function drawLoadbar(){const lb=$('loadbar');lb.innerHTML='';frames.forEach((f,i)=>{const s=document.createElement('i');s.className=({dl:'dl',pr:'pr',ok:'ok',bad:'bad'})[f.state]||'';if(i===st.t)s.classList.add('cur');s.title=fmtTime(f.entry.time);lb.appendChild(s)})}
-const PNAME={z:'Super-Res Reflectivity',v:'Super-Res Velocity',c:'Correlation Coefficient',w:'Spectrum Width',d:'Differential Reflectivity (ZDR)',k:'Specific Differential Phase (KDP)',r:'Raw Velocity'};
+const PNAME={z:'Super-Res Reflectivity',v:'Super-Res Velocity',c:'Correlation Coefficient',w:'Spectrum Width',d:'Differential Reflectivity (ZDR)',k:'Specific Differential Phase (KDP)',r:'Cleaned Velocity'};
 const VNAME={tilts:'All tilts, true heights',blocks:'3D Blocks',shells:'3D Shells',volume:'Volume Render'};
 function meta(){
   const f=frames[st.t];
@@ -854,15 +856,61 @@ function volTex(fr,field){fr.vtex=fr.vtex||{};if(fr.vtex[field])return fr.vtex[f
   if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
   return fr.vtex[field]=tex3(d,G)}
 const volMat=new THREE.ShaderMaterial({
-  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()}},
+  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)}},
   vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`precision highp float;precision highp sampler3D;
 uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform vec2 uDec;uniform float uRange;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
+uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;
+/* strength of what's shown at a point, on a common scale: 0 = just visible (the slider), ~20+ = strong.
+   lq returns the colour-table index for that point. */
+float strength(vec3 tc,out float lq){float zq=texture(uZ,tc).r*255.0;float dbz=zq-32.0;
+  if(uField==0){lq=zq;return dbz-uMin;}
+  float fq=texture(uF,tc).r*255.0;lq=fq;
+  if(uField==1){if(dbz<12.0)return -30.0;return abs(fq-64.0)-uMin;}
+  if(uField==3){if(dbz<15.0)return -30.0;return (fq*uDec.x+uDec.y-uMin)*(8.0/uRange);}
+  if(dbz<25.0)return -30.0;return (uMin-fq/200.0)*100.0;}
+float strengthOnly(vec3 tc){float q;return strength(tc,q);}
+// surface direction from how the strength changes around a point, turned into real-world proportions
+vec3 normalAt(vec3 tc){vec3 g=vec3(strengthOnly(tc+vec3(uVox.x,0,0))-strengthOnly(tc-vec3(uVox.x,0,0)),
+    strengthOnly(tc+vec3(0,uVox.y,0))-strengthOnly(tc-vec3(0,uVox.y,0)),strengthOnly(tc+vec3(0,0,uVox.z))-strengthOnly(tc-vec3(0,0,uVox.z)));
+  vec3 n=vec3(g.x/uScale.x,g.z/uScale.y,-g.y/uScale.z);float m=length(n);return m>1e-5?-n/m:vec3(0.0);}
+vec3 shade(vec3 base,vec3 n,vec3 vd){if(dot(n,n)<0.5)return base*0.85;vec3 L=normalize(uLight);
+  float dif=max(dot(n,L),0.0),wrap=max(dot(n,L)*0.5+0.5,0.0),sp=pow(max(dot(reflect(-L,n),-vd),0.0),24.0);
+  return base*(0.28+0.42*wrap+0.45*dif)+vec3(0.22*sp);}
+vec3 lut(float q){return texture(uLut,vec2((q+0.5)/256.0,0.5)).rgb;}
 vec2 hitBox(vec3 o,vec3 d){vec3 inv=1.0/d;vec3 t0=(vec3(-0.5)-o)*inv;vec3 t1=(vec3(0.5)-o)*inv;vec3 a=min(t0,t1);vec3 b=max(t0,t1);return vec2(max(max(a.x,a.y),a.z),min(min(b.x,b.y),b.z));}
 void main(){
   vec3 d=normalize(vPos-uCam);vec2 b=hitBox(uCam,d);if(b.x>b.y)discard;b.x=max(b.x,0.0);
   float dt=1.0/uSteps;float t=b.x+dt*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
   vec4 acc=vec4(0.0);
+  vec3 vd=normalize(d*uScale);   // view direction in real-world proportions
+  if(uCloud==0&&uLook==3){   // SURFACES: three nested skins (outer see-through, inner solid), lit like solid objects
+    float prev=-99.0;
+    for(int i=0;i<1400;i++){
+      if(t>b.y||acc.a>0.97)break;
+      vec3 p=uCam+d*t;
+      if(p.x<uCut){t+=dt;prev=-99.0;continue;}
+      vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);float lq;float s=strength(tc,lq);
+      for(int k=0;k<3;k++){float lv=k==0?0.0:k==1?15.0:25.0;
+        if(prev<lv&&s>=lv){float f=prev<-50.0?0.0:clamp((lv-prev)/max(s-prev,1e-3),0.0,1.0);vec3 ph=p-d*dt*(1.0-f);vec3 th=vec3(ph.x+0.5,0.5-ph.z,ph.y+0.5);
+          float q2;strength(th,q2);vec3 n=normalAt(th);vec3 base=lut(uField==0?uMin+lv+32.0:q2);
+          float a=(k==0?0.16:k==1?0.38:0.97)*clamp(uOpacity*2.0,0.3,1.0);
+          vec3 c=shade(base,n,vd);acc.rgb+=(1.0-acc.a)*a*c;acc.a+=(1.0-acc.a)*a;}}
+      prev=s;t+=dt;}
+    if(acc.a<0.004)discard;gl_FragColor=vec4(acc.rgb/acc.a,acc.a);return;}
+  if(uCloud==0&&(uLook==1||uLook==2)){   // LIT / BANDED: fog that's lit by the sun, denser so storms look solid
+    for(int i=0;i<1400;i++){
+      if(t>b.y||acc.a>0.97)break;
+      vec3 p=uCam+d*t;t+=dt;
+      if(p.x<uCut)continue;
+      vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);float lq;float s=strength(tc,lq);
+      if(s<0.0)continue;
+      float a=smoothstep(0.0,3.0,s)*(0.05+0.95*pow(clamp(s/28.0,0.0,1.0),1.6));   // light rain nearly see-through, cores solid
+      a=clamp(a*uOpacity*dt*60.0*3.0,0.0,1.0);if(a<0.002)continue;
+      if(uLook==2&&uField==0)lq=floor((lq-32.0)/5.0)*5.0+32.0+2.5;   // sharp 5 dBZ colour bands
+      vec3 c=shade(lut(lq),normalAt(tc),vd);
+      acc.rgb+=(1.0-acc.a)*a*c;acc.a+=(1.0-acc.a)*a;}
+    if(acc.a<0.004)discard;gl_FragColor=vec4(acc.rgb/acc.a,acc.a);return;}
   for(int i=0;i<1400;i++){
     if(t>b.y||acc.a>0.97)break;
     vec3 p=uCam+d*t;t+=dt;
@@ -893,7 +941,8 @@ const volMesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),volMat);volMesh.userDa
 const _inv=new THREE.Matrix4();
 const _sd=new THREE.Vector3();
 function updateVolCam(){if(!volMesh.parent)return;volMesh.updateMatrixWorld();_inv.copy(volMesh.matrixWorld).invert();volMat.uniforms.uCam.value.copy(camera.position).applyMatrix4(_inv);
-  _sd.copy(SKY.dir).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd)}
+  _sd.copy(SKY.dir).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd);
+  volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize()}   // light for the lit looks: the sun, kept fairly high so storms never go black
 let frameGroup=null,FRAME_LABELS=[];
 function dropFrame(){if(frameGroup){world.remove(frameGroup);disposeTree(frameGroup);frameGroup=null}FRAME_LABELS=[]}
 function buildFrame(G){   // GR2-style wireframe box with height marks every 5 km
@@ -912,7 +961,7 @@ function buildVolume(fr){
   volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
   u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
   u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=st.vmin[st.data];
-  u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
+  u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uLook.value=VLOOK[st.volLook];u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
   storm.add(volMesh);
   if(st.volShells)buildShells(fr);
   buildFrame(G);
@@ -978,7 +1027,7 @@ $('dZ').onclick=()=>setData('z');$('dV').onclick=()=>setData('v');$('dC').onclic
 const XINFO={w:['SW','Spectrum Width','How messy the wind is inside each spot. High values often show up at tornadoes, strong rotation and turbulent outflow.'],
   d:['ZDR','Differential Reflectivity (ZDR)','The shape of what the radar sees. Big flat raindrops read high; hail and tumbling debris read near zero. Helps find big hail and the updraft.'],
   k:['KDP','Specific Differential Phase (KDP)','How much water is packed in. High KDP means very heavy rain, good for spotting flash-flood cores.'],
-  r:['Raw V','Raw Velocity','Wind toward and away from the radar before BoM cleans it up. Shows folded (aliased) patches that Vel has fixed.']};
+  r:['Clean V','Cleaned Velocity',"BoM's cleaned-up wind toward and away from the radar. It fixes folded patches (where very strong wind flips colour), but its fixes sometimes add glitches of their own. Vel shows the raw wind."]};
 function xHave(){const s=new Set();for(const f of frames)if(f.state==='ok'&&f.out&&f.out.extra)for(const k of f.out.extra)s.add(k);return s}
 function drawXMenu(){const have=xHave(),loaded=frames.some(f=>f.state==='ok');
   $('xList').innerHTML=XKEYS.map(k=>`<button class="xopt" data-k="${k}" aria-pressed="${st.data===k}" ${loaded&&!have.has(k)?'disabled':''}><b>${XINFO[k][1]}</b><small>${loaded&&!have.has(k)?'Not recorded by this radar on this day.':XINFO[k][2]}</small></button>`).join('')+
@@ -1032,6 +1081,8 @@ $('vwLow').onclick=()=>ackWarn('low');$('vwMed').onclick=()=>ackWarn('med');
 $('qLow').onclick=()=>{setQuality('low');render()};$('qMed').onclick=()=>{setQuality('med');render()};$('qHigh').onclick=()=>{setQuality('high');render()};
 $('vOp').oninput=()=>{st.volOp=+$('vOp').value;$('vOpv').textContent=st.volOp+'%';volMat.uniforms.uOpacity.value=st.volOp/100};
 $('vMin').oninput=()=>{st.vmin[st.data]=+$('vMin').value;syncVolMin();volMat.uniforms.uMin.value=st.vmin[st.data]};
+function syncLook(){document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.look===st.volLook))}
+document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;try{localStorage.setItem('hist-vlook',st.volLook)}catch(e){}syncLook();render()});syncLook();
 $('vPal').onclick=()=>{st.volPal=st.volPal==='gr2'?'rs':'gr2';$('vPal').setAttribute('aria-pressed',st.volPal==='gr2');$('vPal').textContent=st.volPal==='gr2'?'GR2 colours':'RadarScope colours';drawScale();render()};
 $('vBox').onclick=()=>{st.volBox=!st.volBox;$('vBox').setAttribute('aria-pressed',st.volBox);render()};
 $('vShell').onclick=()=>{st.volShells=!st.volShells;$('vShell').setAttribute('aria-pressed',st.volShells);render()};
