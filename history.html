@@ -233,10 +233,9 @@ body.picking #scene{cursor:crosshair}
     <div class="chips" data-views="volume"><span class="lbl">Quality</span><button class="chip sel" id="qLow" aria-pressed="false">Low</button><button class="chip sel" id="qMed" aria-pressed="true">Medium</button><button class="chip sel" id="qHigh" aria-pressed="false">High</button></div>
     <div class="row" data-views="volume"><label for="vOp">Fog density</label><input id="vOp" type="range" min="10" max="100" value="40"><output id="vOpv">40%</output></div>
     <div class="row" data-views="volume"><label for="vMin" id="vMinLbl">Glow from</label><input id="vMin" type="range" min="10" max="60" value="25"><output id="vMinv">25</output></div>
-    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="glow">Glow</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="solid">Solid (GR2)</button></div>
+    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="glow">Glow</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="solid">Solid (GR2)</button><button class="chip sel" data-look="cloud">Cloud</button></div>
     <div class="row" data-views="volume" id="difRow"><label for="vDif">Shading</label><input id="vDif" type="range" min="0" max="100" value="65"><output id="vDifv">65%</output></div>
-    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button><button class="chip sel" id="vFloor">Radar on floor</button></div>
-    <div class="chips" data-views="volume" id="cloudRow" hidden><span class="lbl">Cloud</span><button class="chip sel" id="lSun">Sun light</button><button class="chip sel" id="lEye">Camera light</button><button class="chip sel" id="vBlack">Black background</button><button class="chip sel" id="vSmooth">Smooth</button></div>
+    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vFloor">Radar on floor</button></div>
     <div class="note warnnote" data-views="volume">Volume render is heavy on older phones. If it stutters, pick Low.</div>
     <div class="chips shellchips" id="zChips"><span class="lbl">dBZ shells</span></div>
     <div class="chips shellchips" id="vChips"><span class="lbl">Wind shells</span></div>
@@ -289,10 +288,12 @@ LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
 
 const $=id=>document.getElementById(id);
 function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
-const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4,paint:5};
+const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4,paint:5,cloud:0};
+/* Cloud look: smoothing, black background and sun light are on only for it (and it only works with dBZ) */
+function cloudOn(){return st.volLook==='cloud'&&st.data==='z'}
 const VM=()=>st.volLook==='solid'||st.volLook==='paint'?st.vminS:st.vmin;   // the Solid look has its own surface strength (GR2 users usually pick 40-50 dBZ)
 const sget=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},sset=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const st={volLook:(v=>['glow','lit','solid'].includes(v)?v:'glow')(sget('hist-vlook3','glow')),volLight:sget('hist-clight','sun'),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volBlack:sget('hist-cblack','0')==='1',volSmooth:sget('hist-csmooth','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+const st={volLook:(v=>['glow','lit','solid','cloud'].includes(v)?v:'glow')(sget('hist-vlook3','glow')),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
   op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
   on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
 const SHELLS={
@@ -339,7 +340,7 @@ const SKYK=[[-18,'#02040a','#060a13','#000000',0,0.34,0.32],[-8,'#06102a','#1b23
   [2,'#24497f','#f08a4a','#ff9a5a',0.5,0.6,0.7],[9,'#3a6cb0','#f3c48e','#ffc890',0.72,0.72,0.86],[25,'#2a66b4','#a8c9ea','#fff4e2',0.85,0.8,1]];
 // satellite map brightness: the same as the 2D view in every 3D view (it used to be darkened a lot in 3D, especially Volume),
 // only dimmed for dusk and night
-const groundLevel=()=>Math.max(0.5,SKY.ground??1)*(st.view==='volume'&&!st.grey?0.85:1);
+const groundLevel=()=>Math.max(0.5,SKY.ground??1)*(st.view==='volume'&&!cloudOn()?0.85:1);
 const SKY={dir:new THREE.Vector3(-0.5,0.7,0.4).normalize(),key:''};
 const hemi=scene.children.find(o=>o.isHemisphereLight);
 const skyCanvas=document.createElement('canvas');skyCanvas.width=2;skyCanvas.height=256;const skyTex=new THREE.CanvasTexture(skyCanvas);
@@ -838,7 +839,8 @@ function render(){
   const radar=st.view==='radar';
   TOPR=Math.min(150,(fr.out.polar.r0+fr.out.polar.rs*(fr.out.polar.z?fr.out.polar.z.nbins:0))/1000||150);
   const floor=radar||(st.view==='volume'&&st.volFloor);topPlane.visible=floor;   // GR2 style: the flat radar on the floor under the 3D storm
-  skyMode(st.view==='volume'&&st.grey&&st.volBlack);
+  skyMode(st.view==='volume'&&cloudOn());
+  if(st.view==='volume'&&st.volLook==='cloud'&&st.data!=='z')status('Cloud look only works with dBZ, so this shows Glow.');
   if(isX(st.data)&&!(fr.out.extra||[]).includes(st.data))status(`This scan has no ${XINFO[st.data][1]}, so it shows reflectivity instead.`,true);
   else if(isX(st.data)&&st.view==='shells')status(`Shells are only made for dBZ, Vel and CC, so these are dBZ shells. Try Tilts, Blocks or Volume for ${XINFO[st.data][0]}.`);
   if(floor){const key=`${st.t}|${st.data}`;if(key!==topKey){if(topTex)topTex.dispose();topTex=polarTexture(fr,st.data)||polarTexture(fr,'z');topKey=key}
@@ -866,7 +868,7 @@ function smooth3(src,G,fillv){const nx=G.nx,ny=G.ny,nz=G.nz,N2=nx*ny,o=new Uint8
   for(let k=0;k<nz;k++)for(let i=0;i<nx;i++)for(let j=0;j<ny;j++){let s=0,n=0;for(let d=-1;d<=1;d++){const jj=j+d;if(jj<0||jj>=ny)continue;s+=a[k*N2+jj*nx+i];n++}b[k*N2+j*nx+i]=s/n}
   for(let k=0;k<nz;k++)for(let x=0;x<N2;x++){let s=0,n=0;for(let d=-1;d<=1;d++){const kk=k+d;if(kk<0||kk>=nz)continue;s+=b[kk*N2+x];n++}const v=s/n;o[k*N2+x]=v<fillv+0.5&&!src[k*N2+x]?0:Math.max(1,Math.min(255,Math.round(v)))}
   return o}
-function volTex(fr,field){const sm=st.grey&&st.volSmooth,tk=field+(sm?'s2':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
+function volTex(fr,field){const sm=cloudOn(),tk=field+(sm?'s2':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
   if(sm){const fv=field==='z'?0:{v:64,r:64,c:200,w:1,d:121,k:41}[field];d=smooth3(smooth3(d,G,fv),G,fv)}   // twice: melts the straight walls between radar tilts
   if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
   fr.vtex[tk]=tex3(d,G);fr.vtex[tk].userData={d};return fr.vtex[tk]}
@@ -1046,11 +1048,10 @@ const _inv=new THREE.Matrix4();
 const _sd=new THREE.Vector3();
 function updateVolCam(){if(!volMesh.parent)return;volMesh.updateMatrixWorld();_inv.copy(volMesh.matrixWorld).invert();volMat.uniforms.uCam.value.copy(camera.position).applyMatrix4(_inv);
   _sd.copy(SKY.dir).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd);
-  const lm=st.grey?st.volLight:st.volLook==='solid'?'eye':'sun';   // Lit uses the sun, Solid the camera (like GR2), Cloud whatever you pick
+  const lm=cloudOn()?'sun':'eye';   // sun light only for Cloud; Lit and Solid are lit from the camera (like GR2)
   if(lm==='eye'){camera.getWorldDirection(_fw);_up.copy(camera.up).applyQuaternion(camera.quaternion);_rt.crossVectors(_fw,_up).normalize();
     volMat.uniforms.uLight.value.copy(_fw).multiplyScalar(-1).addScaledVector(_up,0.55).addScaledVector(_rt,-0.35).normalize()}   // like GR2's "eye space": light comes from just above-left of you
-  else volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize();
-  if(st.grey&&lm==='eye'){_sd.copy(volMat.uniforms.uLight.value).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd)}}
+  else volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize();}
 const _fw=new THREE.Vector3(),_up=new THREE.Vector3(),_rt=new THREE.Vector3();   // light for the lit looks: the sun, kept fairly high so storms never go black
 let frameGroup=null,FRAME_LABELS=[];
 function dropFrame(){if(frameGroup){world.remove(frameGroup);disposeTree(frameGroup);frameGroup=null}FRAME_LABELS=[]}
@@ -1071,13 +1072,13 @@ function buildVolume(fr){
   volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
   u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
   u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=VM()[st.data];
-  u.uCloud.value=st.grey&&st.data==='z'?1:0;if(u.uCloud.value){u.uNoise.value=makeCloudNoise();u.uReal.value.set(W,H,W);u.uTop.value=cloudTopTex(fr)}u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
+  u.uCloud.value=cloudOn()?1:0;if(u.uCloud.value){u.uNoise.value=makeCloudNoise();u.uReal.value.set(W,H,W);u.uTop.value=cloudTopTex(fr)}u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
   storm.add(volMesh);
   if(st.volShells)buildShells(fr);
   buildFrame(G);
 }
 // cloud tops: for each column, the highest point the cloud reaches (so the tops can be rounded into domes)
-function cloudTopTex(fr){const thr=Math.round(VM().z-14+32);const key='top'+thr+(st.grey&&st.volSmooth?'s':'');fr.vtex=fr.vtex||{};if(fr.vtex[key])return fr.vtex[key];
+function cloudTopTex(fr){const thr=Math.round(VM().z-14+32);const key='top'+thr+'s';fr.vtex=fr.vtex||{};if(fr.vtex[key])return fr.vtex[key];
   const G=fr.out.grid,N2=G.nx*G.ny,src=volTex(fr,'z').userData.d,o=new Uint8Array(N2);
   for(let k=0;k<N2;k++){let top=0;for(let l=G.nz-1;l>=0;l--){if(src[l*N2+k]>=thr){top=l+1;break}}o[k]=Math.round(top/G.nz*255)}
   const t=new THREE.DataTexture(o,G.nx,G.ny,THREE.LuminanceFormat);t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return fr.vtex[key]=t}
@@ -1159,8 +1160,8 @@ $('radarOp').oninput=()=>{st.radarOp=+$('radarOp').value;$('radarOpv').textConte
 $('lift').oninput=()=>{st.lift=+$('lift').value;$('liftv').textContent=st.lift+' km';storm.position.y=st.lift;if(st.view==='volume')later(render)};
 $('exag').oninput=()=>{st.exag=+$('exag').value;$('exagv').textContent=st.exag;storm.scale.y=st.exag;meta();if(st.view==='tilts'||st.view==='volume')later(render)};
 $('cut').oninput=()=>{st.cut=+$('cut').value;clip.constant=-st.cut;if(st.view==='volume')later(render);$('cutv').textContent=st.cut<=-150?'off':(st.cut<0?`${-st.cut} km W`:`${st.cut} km E`)};
-function setCloud(on){st.grey=on;$('grey').setAttribute('aria-pressed',on);$('vCloud').setAttribute('aria-pressed',on);syncLook();drawOpac();render()}
-$('grey').onclick=()=>setCloud(!st.grey);$('vCloud').onclick=()=>setCloud(!st.grey);
+function setCloud(on){st.grey=on;$('grey').setAttribute('aria-pressed',on);drawOpac();render()}   // cloud-coloured shells (Shells view)
+$('grey').onclick=()=>setCloud(!st.grey);
 $('opReset').onclick=()=>{st.op=JSON.parse(JSON.stringify(OP_DEFAULT));drawOpac();render()};
 $('raise').onclick=()=>{st.raise=!st.raise;document.body.classList.toggle('raised',st.raise);$('raise').setAttribute('aria-pressed',st.raise);render();
   home()};
@@ -1197,14 +1198,10 @@ $('qLow').onclick=()=>{setQuality('low');render()};$('qMed').onclick=()=>{setQua
 $('vOp').oninput=()=>{st.volOp=+$('vOp').value;$('vOpv').textContent=st.volOp+'%';volMat.uniforms.uOpacity.value=st.volOp/100};
 $('vMin').oninput=()=>{VM()[st.data]=+$('vMin').value;syncVolMin();volMat.uniforms.uMin.value=VM()[st.data]};
 function syncLook(){document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.look===st.volLook));
-  $('lEye').setAttribute('aria-pressed',st.volLight==='eye');$('lSun').setAttribute('aria-pressed',st.volLight==='sun');$('vDif').value=st.volDif;$('vDifv').textContent=st.volDif+'%';
-  $('vFloor').setAttribute('aria-pressed',st.volFloor);$('vSmooth').setAttribute('aria-pressed',st.volSmooth);$('vBlack').setAttribute('aria-pressed',st.volBlack);
-  $('cloudRow').hidden=!st.grey;$('difRow').hidden=st.volLook==='glow'||st.grey;$('vMinLbl').textContent=st.volLook==='solid'||st.volLook==='paint'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
-$('lEye').onclick=()=>{st.volLight='eye';sset('hist-clight','eye');syncLook();render()};$('lSun').onclick=()=>{st.volLight='sun';sset('hist-clight','sun');syncLook();render()};
+  $('vDif').value=st.volDif;$('vDifv').textContent=st.volDif+'%';$('vFloor').setAttribute('aria-pressed',st.volFloor);
+  $('difRow').hidden=st.volLook==='glow'||st.volLook==='cloud';$('vMinLbl').textContent=st.volLook==='solid'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
 $('vDif').oninput=()=>{st.volDif=+$('vDif').value;sset('hist-vdif',st.volDif);$('vDifv').textContent=st.volDif+'%';volMat.uniforms.uAmb.value=1-st.volDif/100};
-$('vSmooth').onclick=()=>{st.volSmooth=!st.volSmooth;sset('hist-csmooth',st.volSmooth?'1':'0');syncLook();render()};
 $('vFloor').onclick=()=>{st.volFloor=!st.volFloor;sset('hist-vfloor',st.volFloor?'1':'0');syncLook();render()};
-$('vBlack').onclick=()=>{st.volBlack=!st.volBlack;sset('hist-cblack',st.volBlack?'1':'0');syncLook();render()};
 document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;sset('hist-vlook3',st.volLook);syncLook();syncVolMin();render()});syncLook();
 $('vPal').onclick=()=>{st.volPal=st.volPal==='gr2'?'rs':'gr2';$('vPal').setAttribute('aria-pressed',st.volPal==='gr2');$('vPal').textContent=st.volPal==='gr2'?'GR2 colours':'RadarScope colours';drawScale();render()};
 $('vBox').onclick=()=>{st.volBox=!st.volBox;$('vBox').setAttribute('aria-pressed',st.volBox);render()};
