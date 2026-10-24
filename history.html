@@ -866,16 +866,16 @@ function smooth3(src,G,fillv){const nx=G.nx,ny=G.ny,nz=G.nz,N2=nx*ny,o=new Uint8
   for(let k=0;k<nz;k++)for(let i=0;i<nx;i++)for(let j=0;j<ny;j++){let s=0,n=0;for(let d=-1;d<=1;d++){const jj=j+d;if(jj<0||jj>=ny)continue;s+=a[k*N2+jj*nx+i];n++}b[k*N2+j*nx+i]=s/n}
   for(let k=0;k<nz;k++)for(let x=0;x<N2;x++){let s=0,n=0;for(let d=-1;d<=1;d++){const kk=k+d;if(kk<0||kk>=nz)continue;s+=b[kk*N2+x];n++}const v=s/n;o[k*N2+x]=v<fillv+0.5&&!src[k*N2+x]?0:Math.max(1,Math.min(255,Math.round(v)))}
   return o}
-function volTex(fr,field){const sm=st.grey&&st.volSmooth,tk=field+(sm?'s':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
-  if(sm)d=smooth3(d,G,field==='z'?0:{v:64,r:64,c:200,w:1,d:121,k:41}[field]);
+function volTex(fr,field){const sm=st.grey&&st.volSmooth,tk=field+(sm?'s2':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
+  if(sm){const fv=field==='z'?0:{v:64,r:64,c:200,w:1,d:121,k:41}[field];d=smooth3(smooth3(d,G,fv),G,fv)}   // twice: melts the straight walls between radar tilts
   if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
-  return fr.vtex[tk]=tex3(d,G)}
+  fr.vtex[tk]=tex3(d,G);fr.vtex[tk].userData={d};return fr.vtex[tk]}
 const volMat=new THREE.ShaderMaterial({
-  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)},uAmb:{value:0.35},uNoise:{value:null},uReal:{value:new THREE.Vector3(1,1,1)},uBase:{value:1.5}},
+  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)},uAmb:{value:0.35},uNoise:{value:null},uReal:{value:new THREE.Vector3(1,1,1)},uBase:{value:1.5},uTop:{value:null}},
   vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`precision highp float;precision highp sampler3D;
 uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform vec2 uDec;uniform float uRange;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
-uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;uniform float uAmb;uniform sampler3D uNoise;uniform vec3 uReal;uniform float uBase;
+uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;uniform float uAmb;uniform sampler3D uNoise;uniform vec3 uReal;uniform float uBase;uniform sampler2D uTop;
 /* ---- realistic cloud ----
    The radar shows where rain and hail are; the cloud is drawn around that: billowy edges come from a 3D noise pattern
    (cauliflower towers), a flat base near 1.5 km, and rain shafts hanging below it where the radar shows heavy rain.
@@ -883,12 +883,16 @@ uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;unif
    and soft light from the sky. Physics uses real kilometres, so the height stretch doesn't change how thick it looks. */
 float cloudDens(vec3 p,out float rain){vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);float dbz=texture(uZ,tc).r*255.0-32.0;rain=0.0;
   float cov=smoothstep(uMin-14.0,uMin+14.0,dbz);if(cov<=0.0)return 0.0;
-  vec3 k=vec3(p.x*uReal.x,(p.y+0.5)*uReal.y,p.z*uReal.z);float hkm=k.y;
+  float hkm=(p.y+0.5)*uReal.y;                                 // real height (for the cloud base)
+  vec3 k=vec3(p.x*uScale.x,(p.y+0.5)*uScale.y,p.z*uScale.z);  // billows laid out in the space you see, so they stay round at any height stretch
   float n=texture(uNoise,k/16.0).r,n2=texture(uNoise,k/5.0+vec3(0.31,0.17,0.73)).r;   // billows ~2 km across, detail ~0.6 km
-  float shape=n*0.8+n2*0.2;   // big cauliflower billows, a little fine detail
-  float d=clamp((cov-(1.0-shape)*0.85)/max(1.0-(1.0-shape)*0.85,0.05),0.0,1.0);d=smoothstep(0.0,0.35,d);   // crisp edges, like real towers
+  float shape=n*0.8+n2*0.2;
+  float d=clamp((cov-(1.0-shape)*0.85)/max(1.0-(1.0-shape)*0.85,0.05),0.0,1.0);
+  float top=texture(uTop,tc.xy).r*uReal.y;float near=clamp((top-hkm)/1.6,0.0,1.0);   // the top 1.6 km of each column is eroded into bubbly domes
+  d=clamp(d-(1.0-near)*(1.0-shape)*1.3,0.0,1.0);
+  d=smoothstep(0.0,0.35,d);   // crisp edges, like real towers
   float baseFade=smoothstep(uBase-0.2,uBase+0.45,hkm);
-  if(hkm<uBase+0.3){float streak=texture(uNoise,vec3(k.x/1.2,k.y/9.0,k.z/1.2)).r;rain=smoothstep(28.0,52.0,dbz)*(0.35+0.65*streak)*(1.0-baseFade*0.7);}
+  if(hkm<uBase+0.3){float streak=texture(uNoise,vec3(k.x/1.2,hkm/9.0,k.z/1.2)).r;rain=smoothstep(28.0,52.0,dbz)*(0.35+0.65*streak)*(1.0-baseFade*0.7);}
   return d*baseFade;}
 float cloudShadow(vec3 p){float od=0.0;float sl=0.55/max(length(uSunDir*uReal),1e-3);vec3 s=normalize(uSunDir);
   for(int j=1;j<=6;j++){float tj=float(j)*float(j)*0.5;vec3 q=p+s*(sl*tj);if(abs(q.x)>0.5||abs(q.z)>0.5||q.y>0.5||q.y<-0.5)break;float r;od+=(cloudDens(q,r)+r*0.3)*0.55*float(j);}
@@ -914,11 +918,13 @@ vec3 lut(float q){return texture(uLut,vec2((q+0.5)/256.0,0.5)).rgb;}
 vec2 hitBox(vec3 o,vec3 d){vec3 inv=1.0/d;vec3 t0=(vec3(-0.5)-o)*inv;vec3 t1=(vec3(0.5)-o)*inv;vec3 a=min(t0,t1);vec3 b=max(t0,t1);return vec2(max(max(a.x,a.y),a.z),min(min(b.x,b.y),b.z));}
 void main(){
   vec3 d=normalize(vPos-uCam);vec2 b=hitBox(uCam,d);if(b.x>b.y)discard;b.x=max(b.x,0.0);
-  float dt=1.0/uSteps;float t=b.x+dt*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
+  float dt=1.0/uSteps;float t=b.x+dt*fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));   // even, low-grain sampling pattern
   vec4 acc=vec4(0.0);
   vec3 vd=normalize(d*uScale);   // view direction in real-world proportions
   if(uCloud==1){
-    float T=1.0;vec3 L=vec3(0.0);float segKm=length(d*uReal)*dt;vec3 sd=normalize(uSunDir*uReal);float cosT=dot(normalize(d*uReal),sd);
+    float T=1.0;vec3 L=vec3(0.0);float segKm=length(d*uReal)*dt;
+    vec3 sunC=uSunCol;float slum=dot(sunC,vec3(0.3,0.59,0.11));sunC*=min(3.0,max(1.0,0.9/max(slum,0.02)));   // low sun keeps its colour but stays bright enough to light the cloud up (golden tops at sunset)
+    vec3 sd=normalize(uSunDir*uReal);float cosT=dot(normalize(d*uReal),sd);
     float ph=mix(hg(cosT,0.6),hg(cosT,-0.25),0.3)*12.566;   // silver lining toward the sun, softer glow away from it
     for(int i=0;i<1400;i++){
       if(t>b.y||T<0.03)break;
@@ -933,8 +939,8 @@ void main(){
       float Tl=exp(-od*0.75),ms=exp(-od*0.18)*0.22;          // direct sun through the cloud + light bounced around inside it
       float powder=1.0-exp(-dn*2.0);
       vec3 sky=uSky*(0.45+0.5*h01);
-      vec3 sunL=uSunCol*(Tl*(ph+0.35)*mix(0.5,1.0,powder)*1.45+ms);
-      vec3 c=dn>rain*0.5?sunL+sky*0.3*(0.4+0.6*Tl):(sky*0.5+uSunCol*Tl*0.12)*vec3(0.78,0.8,0.86);   // rain shafts: dull grey
+      vec3 sunL=sunC*(Tl*(ph+0.35)*mix(0.5,1.0,powder)*1.45+ms);
+      vec3 c=dn>rain*0.5?sunL+mix(sky*vec3(0.75,0.85,1.05),sky,Tl)*0.32*(0.45+0.55*Tl):(sky*0.5+uSunCol*Tl*0.12)*vec3(0.78,0.8,0.86);   // rain shafts: dull grey
       L+=T*a*c;T*=1.0-a;t+=dt*stp;}
     float A=1.0-T;if(A<0.004)discard;vec3 C=L/A;C=1.0-exp(-C*1.15);   // camera-like exposure, so bright cloud keeps its shading instead of going flat white
     gl_FragColor=vec4(C,A);return;}
@@ -1065,11 +1071,16 @@ function buildVolume(fr){
   volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
   u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
   u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=VM()[st.data];
-  u.uCloud.value=st.grey&&st.data==='z'?1:0;if(u.uCloud.value){u.uNoise.value=makeCloudNoise();u.uReal.value.set(W,H,W)}u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
+  u.uCloud.value=st.grey&&st.data==='z'?1:0;if(u.uCloud.value){u.uNoise.value=makeCloudNoise();u.uReal.value.set(W,H,W);u.uTop.value=cloudTopTex(fr)}u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
   storm.add(volMesh);
   if(st.volShells)buildShells(fr);
   buildFrame(G);
 }
+// cloud tops: for each column, the highest point the cloud reaches (so the tops can be rounded into domes)
+function cloudTopTex(fr){const thr=Math.round(VM().z-14+32);const key='top'+thr+(st.grey&&st.volSmooth?'s':'');fr.vtex=fr.vtex||{};if(fr.vtex[key])return fr.vtex[key];
+  const G=fr.out.grid,N2=G.nx*G.ny,src=volTex(fr,'z').userData.d,o=new Uint8Array(N2);
+  for(let k=0;k<N2;k++){let top=0;for(let l=G.nz-1;l>=0;l--){if(src[l*N2+k]>=thr){top=l+1;break}}o[k]=Math.round(top/G.nz*255)}
+  const t=new THREE.DataTexture(o,G.nx,G.ny,THREE.LuminanceFormat);t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return fr.vtex[key]=t}
 function freeVolTextures(keep){frames.forEach((f,i)=>{if(Math.abs(i-keep)>1&&f.vtex){for(const t of Object.values(f.vtex))t.dispose();f.vtex=null}})}
 /* keep it smooth: if frames get slow in Volume view, step quality down */
 let fpsT=0,fpsN=0,fpsAcc=0,lastQualityDrop=0;
