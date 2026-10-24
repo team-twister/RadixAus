@@ -4,7 +4,17 @@ const MC_TRI=new Int32Array([-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,8
    Runs inside a Web Worker on the phone. No DOM, no three.js.
    Output units: km. Scene axes: x = east, y = up, z = south (so north is -z). */
 const RE = 6371000 * 4 / 3;               // 4/3 Earth radius beam model
-const FIELD_PREF = { z: ['DBZH_CLEAN', 'DBZH', 'TH'], v: ['VRADDH', 'VRADH'], c: ['RHOHV'] };
+const FIELD_PREF = { z: ['DBZH_CLEAN', 'DBZH', 'TH'], v: ['VRADDH', 'VRADH'], c: ['RHOHV'], w: ['WRADH', 'WRAD'], d: ['ZDR'], k: ['KDP'] };
+/* extra products (only kept as flat tilts, not full 3D volumes, to save memory):
+   w = spectrum width (m/s), d = ZDR (dB), k = KDP (deg/km), r = raw velocity before BoM's cleanup (m/s).
+   Stored as one byte each: these encoders must match the decoders in history.html. */
+const EXTRA = ['w', 'd', 'k', 'r'];
+const ENC = {
+  w: v => Math.max(1, Math.min(255, Math.round(v * 10) + 1)),
+  d: v => Math.max(1, Math.min(255, Math.round((v + 8) * 15) + 1)),
+  k: v => Math.max(1, Math.min(255, Math.round((v + 2) * 20) + 1)),
+  r: v => Math.max(1, Math.min(127, Math.round(Math.max(-60, Math.min(60, v))) + 64)),
+};
 
 function attr(node, name) { const a = node.attrs[name]; return a === undefined ? undefined : a.value; }
 
@@ -38,19 +48,20 @@ function readVolume(f) {
       const dg = g.get(d), q = String(attr(dg.get('what'), 'quantity'));
       quant[q] = dg;
     }
-    const fields = {};
-    for (const [key, names] of Object.entries(FIELD_PREF)) {
-      const name = names.find(n => quant[n]);
-      if (!name) continue;
+    // each field keeps the radar's own compact numbers plus their scaling; values are worked out only where needed
+    const field = (name) => {
       const dg = quant[name], wt = dg.get('what');
       const gain = Number(attr(wt, 'gain')), off = Number(attr(wt, 'offset'));
       const nod = Number(attr(wt, 'nodata')), und = Number(attr(wt, 'undetect'));
       const raw = dg.get('data').value;
-      const nb = raw.length / nrays;
-      const out = new Float32Array(raw.length);
-      for (let i = 0; i < raw.length; i++) { const r = raw[i]; out[i] = (r === nod || r === und) ? NaN : r * gain + off; }
-      fields[key] = { data: out, nbins: nb, name };
+      return { raw, nbins: raw.length / nrays, name, at: i => { const r = raw[i]; return (r === nod || r === und) ? NaN : r * gain + off; } };
+    };
+    const fields = {};
+    for (const [key, names] of Object.entries(FIELD_PREF)) {
+      const name = names.find(n => quant[n]);
+      if (name) fields[key] = field(name);
     }
+    if (fields.v && fields.v.name === 'VRADDH' && quant.VRADH) fields.r = field('VRADH');   // raw velocity, only when BoM also gives a cleaned one
     if (!fields.z) continue;
     sweeps.push({ el, nrays, nbins, rs, r0, az, fields });
   }
@@ -99,21 +110,26 @@ function process(vol, opt) {
   }
   // sample every tilt at every column
   const T = { z: [], v: [], c: [], h: [] };
+  const ex = EXTRA.filter(key => vol.sweeps.some(s => s.fields[key]));
+  for (const key of ex) T[key] = [];
   for (const sw of vol.sweeps) {
     const lut = rayLUT(sw.az);
     const tz = new Float32Array(N2).fill(NaN), tv = new Float32Array(N2).fill(NaN), tc = new Float32Array(N2).fill(NaN), th = new Float32Array(N2).fill(NaN);
     const fz = sw.fields.z, fv = sw.fields.v, fc = sw.fields.c;
+    const xs = ex.map(key => ({ key, f: sw.fields[key], o: new Uint8Array(N2) }));
     for (let k = 0; k < N2; k++) {
       const ray = lut[AZ[k]]; if (ray < 0) continue;
       const [r, h] = slant(S[k], sw.el);
       const b = Math.floor((r - sw.r0) / sw.rs);
       if (b < 0 || b >= fz.nbins) continue;
       th[k] = h;
-      tz[k] = fz.data[ray * fz.nbins + b];
-      if (fv && b < fv.nbins) tv[k] = fv.data[ray * fv.nbins + b];
-      if (fc && b < fc.nbins) tc[k] = fc.data[ray * fc.nbins + b];
+      tz[k] = fz.at(ray * fz.nbins + b);
+      if (fv && b < fv.nbins) tv[k] = fv.at(ray * fv.nbins + b);
+      if (fc && b < fc.nbins) tc[k] = fc.at(ray * fc.nbins + b);
+      for (const x of xs) if (x.f && b < x.f.nbins) { const v = x.f.at(ray * x.f.nbins + b); if (v === v) x.o[k] = ENC[x.key](v); }
     }
     T.z.push(tz); T.v.push(tv); T.c.push(tc); T.h.push(th);
+    for (const x of xs) T[x.key].push(x.o);
   }
   // build the 3D volume by interpolating between the tilts above and below each height
   const NV = NZ * N2;
@@ -168,16 +184,24 @@ function process(vol, opt) {
   // lowest tilt in its native polar form, for the flat RadarScope-style view
   const low = vol.sweeps[0];
   const polar = { el: low.el, nrays: low.nrays, rs: low.rs, r0: low.r0, az: low.az };
+  const decode = f => { const o = new Float32Array(f.raw.length); for (let i = 0; i < o.length; i++) o[i] = f.at(i); return o; };
   for (const key of ['z', 'v', 'c']) {
     const f = low.fields[key]; if (!f) continue;
-    polar[key] = { nbins: f.nbins, q: key === 'z' ? qz(f.data) : key === 'v' ? qv(f.data) : qc(f.data) };
+    const d = decode(f);
+    polar[key] = { nbins: f.nbins, q: key === 'z' ? qz(d) : key === 'v' ? qv(d) : qc(d) };
+  }
+  for (const key of ex) {
+    const f = low.fields[key]; if (!f) continue;
+    const q = new Uint8Array(f.raw.length), enc = ENC[key];
+    for (let i = 0; i < q.length; i++) { const v = f.at(i); if (v === v) q[i] = enc(v); }
+    polar[key] = { nbins: f.nbins, q };
   }
   let maxz = -99; for (let i = 0; i < NV; i++) if (Vz[i] > maxz) maxz = Vz[i];
   return {
     grid: { nx: NX, ny: NY, nz: NZ, dx, dz: DZ, x0, y0 },
-    tilts: vol.sweeps.map((s, t) => ({ el: s.el, z: qz(T.z[t]), v: qv(T.v[t]), c: qc(T.c[t]), h: qh(T.h[t]) })),
+    tilts: vol.sweeps.map((s, t) => { const o = { el: s.el, z: qz(T.z[t]), v: qv(T.v[t]), c: qc(T.c[t]), h: qh(T.h[t]) }; for (const key of ex) o[key] = T[key][t]; return o; }),
     vol: { z: qz(Vz), v: qv(Vv), c: qc(Vc) },
-    meshes, polar, maxz, hasV: !!vol.sweeps.some(s => s.fields.v), hasCC,
+    meshes, polar, maxz, hasV: !!vol.sweeps.some(s => s.fields.v), hasCC, extra: ex,
   };
 }
 

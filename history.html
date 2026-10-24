@@ -76,7 +76,10 @@ button,select,input{font-family:var(--ui)}
 .strip .scale{display:flex;height:9px;overflow:hidden;border-radius:1px}
 .strip .scale i{flex:1}
 .ticks{display:none;justify-content:space-between;font:500 .62rem var(--ui);color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
-body[data-data="z"] .ticks[data-for="z"],body[data-data="v"] .ticks[data-for="v"],body[data-data="c"] .ticks[data-for="c"]{display:flex}
+body[data-data="z"] .ticks[data-for="z"],body[data-data="v"] .ticks[data-for="v"],body[data-data="c"] .ticks[data-for="c"],body[data-data="w"] .ticks[data-for="w"],body[data-data="d"] .ticks[data-for="d"],body[data-data="k"] .ticks[data-for="k"],body[data-data="r"] .ticks[data-for="r"]{display:flex}
+.seg button.xb[aria-pressed="true"]{background:#2d5b82}
+#xMenu .card{gap:8px}#xMenu .xopt{display:grid;gap:2px;text-align:left;width:100%;background:var(--fill);border:0;border-radius:12px;padding:11px 12px;color:var(--fg);font:inherit;cursor:pointer}
+#xMenu .xopt b{font-size:.92rem}#xMenu .xopt small{color:var(--muted);font-size:.76rem;line-height:1.35}#xMenu .xopt[aria-pressed="true"]{outline:2px solid var(--accent)}#xMenu .xopt:disabled{opacity:.4;cursor:default}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 6px;align-items:center}
 .seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;min-width:0;gap:2px}
 .seg.grow{flex:1}
@@ -168,6 +171,14 @@ body.picking #scene{cursor:crosshair}
   </div>
 </div>
 
+<!-- more radar products -->
+<div class="sheet" id="xMenu" hidden>
+  <div class="card">
+    <h2>More <span>radar data</span></h2>
+    <div id="xList"></div>
+    <div class="btnrow"><button class="ghost" id="xClose">Close</button></div>
+  </div>
+</div>
 <!-- volume warning -->
 <div class="sheet" id="volWarn" hidden>
   <div class="card">
@@ -189,6 +200,10 @@ body.picking #scene{cursor:crosshair}
     <div class="ticks" data-for="z"><span>15</span><span>25</span><span>35</span><span>45</span><span>55</span><span>65</span><span>75 dBZ</span></div>
     <div class="ticks" data-for="v"><span>35 toward</span><span>15</span><span>0</span><span>15</span><span>35 m/s away</span></div>
     <div class="ticks" data-for="c"><span>0.2</span><span>0.5</span><span>0.8</span><span>0.9</span><span>0.95</span><span>1.0 CC</span></div>
+    <div class="ticks" data-for="w"><span>0</span><span>4</span><span>8</span><span>12</span><span>16</span><span>20 m/s</span></div>
+    <div class="ticks" data-for="d"><span>−2</span><span>0</span><span>2</span><span>4</span><span>6</span><span>8 dB</span></div>
+    <div class="ticks" data-for="k"><span>−1</span><span>0</span><span>2</span><span>4</span><span>6</span><span>8 °/km</span></div>
+    <div class="ticks" data-for="r"><span>35 toward</span><span>15</span><span>0</span><span>15</span><span>35 m/s away</span></div>
   </div>
   <div class="toolbar">
     <div class="seg views" role="group" aria-label="View">
@@ -202,6 +217,7 @@ body.picking #scene{cursor:crosshair}
       <button id="dZ" aria-pressed="true">dBZ</button>
       <button id="dV" class="vel" aria-pressed="false">Vel</button>
       <button id="dC" class="ccb" aria-pressed="false">CC</button>
+      <button id="dX" class="xb" aria-pressed="false">More</button>
     </div>
     <button class="fold" id="fold" aria-expanded="false">Controls</button>
   </div>
@@ -258,15 +274,19 @@ const ZST=[[10,[120,130,140]],[15,[92,157,174]],[20,[39,169,67]],[25,[24,131,35]
 const VST=[[-35,[200,255,200]],[-25,[0,255,60]],[-12,[0,150,40]],[-3,[60,90,65]],[0,[110,110,110]],[3,[95,60,60]],[12,[170,0,20]],[25,[255,30,60]],[35,[255,200,170]]];
 const CST=[[0.2,[20,20,60]],[0.45,[60,60,200]],[0.6,[0,160,255]],[0.75,[0,220,160]],[0.85,[160,255,0]],[0.9,[255,255,0]],[0.93,[255,176,0]],[0.96,[255,80,0]],[0.98,[200,0,30]],[1.0,[130,0,40]],[1.05,[255,220,240]]];
 function ramp(st,z){if(z<=st[0][0])return st[0][1];for(let i=1;i<st.length;i++){const[a,ca]=st[i-1],[b,cb]=st[i];if(z<=b){const t=(z-a)/(b-a);return ca.map((v,k)=>v+(cb[k]-v)*t)}}return st.at(-1)[1]}
-const RAMP={z:ZST,v:VST,c:CST};
-const DEC={z:q=>q-32,v:q=>q-64,c:q=>q/200};
+const WST=[[0,[60,60,70]],[2,[40,90,200]],[4,[0,190,90]],[6,[240,230,0]],[8,[255,150,0]],[10,[230,30,30]],[14,[210,40,200]],[20,[245,240,255]]];
+const DST=[[-2,[40,10,60]],[-1,[110,110,120]],[0,[190,190,200]],[0.5,[120,190,255]],[1,[30,120,240]],[2,[20,200,90]],[3,[245,235,0]],[4,[255,150,0]],[5,[230,30,30]],[6,[240,120,200]],[8,[255,255,255]]];
+const KST=[[-1,[70,70,80]],[0,[120,120,130]],[0.5,[110,180,255]],[1,[20,190,90]],[2,[240,230,0]],[3,[255,150,0]],[4,[230,30,30]],[6,[210,40,200]],[8,[255,255,255]]];
+const RAMP={z:ZST,v:VST,c:CST,w:WST,d:DST,k:KST,r:VST};
+const DEC={z:q=>q-32,v:q=>q-64,c:q=>q/200,w:q=>(q-1)/10,d:q=>(q-1)/15-8,k:q=>(q-1)/20-2,r:q=>q-64};   // must match radarcore.js
+const XKEYS=['w','d','k','r'],isX=d=>XKEYS.includes(d);
 // 256-entry colour tables per field (index = stored byte)
-const LUTC={};for(const k of['z','v','c']){const t=new Uint8Array(256*4);for(let q=1;q<256;q++){const[r,g,b]=ramp(RAMP[k],DEC[k](q));t.set([r,g,b,255],q*4)}LUTC[k]=t}
+const LUTC={};for(const k of['z','v','c','w','d','k','r']){const t=new Uint8Array(256*4);for(let q=1;q<256;q++){const[r,g,b]=ramp(RAMP[k],DEC[k](q));t.set([r,g,b,255],q*4)}LUTC[k]=t}
 LUTC.z.fill(0,0,(10+32)*4);  // hide below 10 dBZ on the flat map
 
 const $=id=>document.getElementById(id);
 function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hidden=false;s.textContent=msg;s.classList.toggle('err',!!err)}
-const st={volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+const st={volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
   op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
   on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
 const SHELLS={
@@ -646,13 +666,15 @@ function chosen(){
   for(let i=lo;i<=hi;i++){if(!ev||E[i].time-last>=ev-60e3){out.push(E[i]);last=E[i].time}}
   return out;
 }
-function updateSize(){const c=chosen(),mb=c.reduce((n,e)=>n+e.csize,0)/1e6;
-  $('build').textContent=$('pickFields').hidden&&c.length<=24?`Build storm · about ${Math.round(mb)} MB`:'Build storm';
-  $('sizeInfo').className='info'+(c.length>24?' err':'');
-  $('sizeInfo').textContent=c.length>24?`${c.length} scans is too many to hold on a phone. Pick 24 or fewer (widen "Every" or shorten the time).`:`${c.length} scan${c.length===1?'':'s'} · about ${Math.round(mb)} MB to download`;
-  $('build').disabled=!c.length||c.length>24}
+const MAXF=300;   // a whole day of scans
+function updateSize(){const c=chosen(),mb=c.reduce((n,e)=>n+e.csize,0)/1e6,big=mb>400;
+  $('build').textContent=$('pickFields').hidden&&c.length<=MAXF?`Build storm · about ${Math.round(mb)} MB`:'Build storm';
+  $('sizeInfo').className='info'+(c.length>MAXF?' err':'');
+  $('sizeInfo').textContent=c.length>MAXF?`${c.length} scans is more than a whole day. Pick ${MAXF} or fewer.`
+    :`${c.length} scan${c.length===1?'':'s'} · about ${mb>=1000?(mb/1000).toFixed(1)+' GB':Math.round(mb)+' MB'} to download${c.length>24?'. Long replay: the scans near the one you\'re watching are kept in full 3D and the rest as the flat radar, so it fits on a phone. 3D rebuilds as you move along.':''}${big?' That\'s a big download, so use Wi-Fi.':''}`;
+  $('build').disabled=!c.length||c.length>MAXF}
 for(const id of['from','to','every','area'])$(id).onchange=updateSize;
-$('build').onclick=()=>{const list=chosen();if(!list.length||list.length>24)return;startSession(dayCache.site,list,false,dayCache.preset?PRESET_TZ:null);$('picker').hidden=true;$('closePicker').hidden=false};
+$('build').onclick=()=>{const list=chosen();if(!list.length||list.length>MAXF)return;startSession(dayCache.site,list,false,dayCache.preset?PRESET_TZ:null);$('picker').hidden=true;$('closePicker').hidden=false};
 $('openPicker').onclick=()=>{$('picker').hidden=false};$('closePicker').onclick=()=>{$('picker').hidden=true};
 
 function gridOpt(){return $('area').value==='close'?{half:60,dx:0.5,cx:session?session.focus.x:0,cy:session?session.focus.y:0}:{half:120,dx:1,cx:0,cy:0}}
@@ -681,7 +703,7 @@ async function startSession(site,list,keepFocus,tzForce){
     chain=chain.then(async()=>{
       if(sess!==session)return;
       if(i===st.t||!frames.some(f=>f.state==='ok'))status(`Building ${fmtTime(fr.entry.time)} in 3D…`);
-      try{const r=await processScan(scan.bytes,scan.method,sess.opt);if(sess!==session)return;fr.out=r.out;fr.meta=r.meta;fr.state='ok';
+      try{const r=await processScan(scan.bytes,scan.method,sess.opt);if(sess!==session)return;fr.out=r.out;fr.meta=r.meta;fr.state='ok';if(isLong()&&Math.abs(i-st.t)>FULL_WIN&&frames.filter(f=>f.state==='ok').length>1)lighten(fr);
         if(i===st.t||frames.filter(f=>f.state==='ok').length===1){if(frames.filter(f=>f.state==='ok').length===1){st.t=i;$('time').value=i;render();home();return}render()}}
       catch(e){fr.state='bad';fr.err=e.message;if(i===st.t)status(`Couldn't build ${fmtTime(fr.entry.time)}: ${e.message}`,true)}
       drawLoadbar();
@@ -692,14 +714,14 @@ async function startSession(site,list,keepFocus,tzForce){
   }
 }
 function drawLoadbar(){const lb=$('loadbar');lb.innerHTML='';frames.forEach((f,i)=>{const s=document.createElement('i');s.className=({dl:'dl',pr:'pr',ok:'ok',bad:'bad'})[f.state]||'';if(i===st.t)s.classList.add('cur');s.title=fmtTime(f.entry.time);lb.appendChild(s)})}
-const PNAME={z:'Super-Res Reflectivity',v:'Super-Res Velocity',c:'Correlation Coefficient'};
+const PNAME={z:'Super-Res Reflectivity',v:'Super-Res Velocity',c:'Correlation Coefficient',w:'Spectrum Width',d:'Differential Reflectivity (ZDR)',k:'Specific Differential Phase (KDP)',r:'Raw Velocity'};
 const VNAME={tilts:'All tilts, true heights',blocks:'3D Blocks',shells:'3D Shells',volume:'Volume Render'};
 function meta(){
   const f=frames[st.t];
   if(!session){$('siteCode').textContent='';$('siteName').textContent='RadixAus History';$('siteSub').textContent='Pick a radar and a date to rebuild a storm';
     $('pname').textContent=PNAME[st.data];$('psub').textContent='';$('pclock').textContent='–';$('pdate').textContent='';return}
   $('siteCode').textContent='IDR'+String(session.site.id).padStart(2,'0');$('siteName').textContent=session.site.name;
-  const nt=f&&f.out?f.out.tilts.length:0,peak=f&&f.out?` · peak <span class="hot">${Math.round(f.out.maxz)} dBZ</span>`:'';
+  const nt=f&&f.out?(f.ntilts||(f.out.tilts?f.out.tilts.length:0)):0,peak=f&&f.out?` · peak <span class="hot">${Math.round(f.out.maxz)} dBZ</span>`:'';
   $('siteSub').innerHTML=`AURA archive${nt?` · ${nt} tilts`:''}${$('area').value==='close'?' · close-up':''}${peak}`;
   $('pname').textContent=PNAME[st.data];
   $('psub').textContent=st.view==='radar'?(f&&f.out?`Elevation = ${f.out.polar.el.toFixed(1)}°`:''):`${VNAME[st.view]} · height ×${st.exag}`;
@@ -711,9 +733,20 @@ function meta(){
 const tmp=new THREE.Object3D(),cc=new THREE.Color();
 function clearStorm(){for(const o of storm.children.slice()){storm.remove(o);if(o.userData.keep)continue;if(o.isInstancedMesh)o.geometry.dispose();[].concat(o.material).forEach(m=>m.dispose())}}
 const colorOf=d=>ramp(RAMP[st.data],d);
-function passes(d){const m=st.min[st.data][st.view];return st.data==='z'?d>=m:st.data==='v'?Math.abs(d)>=m:d<=m}
+function passes(d){const m=st.min[st.data][st.view];return st.data==='v'||st.data==='r'?Math.abs(d)>=m:st.data==='c'?d<=m:d>=m}
+/* the extra products only come as flat tilts (to keep the download light); their 3D volume is filled in here, on the phone,
+   for the scan on screen, the same way the worker does it for dBZ: between the tilt below and above each height */
+function volOf(o,key){if(o.vol[key])return o.vol[key];o.vx=o.vx||{};if(o.vx[key])return o.vx[key];
+  const G=o.grid,N2=G.nx*G.ny,NZ=G.nz,K=o.tilts.length,out=new Uint8Array(N2*NZ),hs=new Float32Array(K),qs=new Uint8Array(K),Z=o.vol.z;
+  for(let k=0;k<N2;k++){for(let t=0;t<K;t++){const tl=o.tilts[t],h=tl.h[k];hs[t]=h?h*100:NaN;qs[t]=tl[key]?tl[key][k]:0}
+    for(let kz=0;kz<NZ;kz++){const idx=kz*N2+k;if(Z[idx]<42)continue;const zz=(kz+0.5)*G.dz*1000;let a=-1,b=-1;
+      for(let t=0;t<K;t++){const hh=hs[t];if(!(hh===hh))continue;if(hh<=zz){if(a<0||hh>hs[a])a=t}else if(b<0||hh<hs[b])b=t}
+      let v=0;if(a>=0&&b>=0&&hs[b]-hs[a]<=4000&&qs[a]&&qs[b]){const w=(zz-hs[a])/Math.max(hs[b]-hs[a],1);v=Math.round(qs[a]*(1-w)+qs[b]*w)}
+      else if(a>=0&&zz-hs[a]<700&&qs[a])v=qs[a];else if(b>=0&&hs[b]-zz<700&&qs[b])v=qs[b];
+      out[idx]=v}}
+  return o.vx[key]=out}
 function buildBlocks(o){
-  const G=o.grid,vol=o.vol[st.data],dec=DEC[st.data],list=[];
+  const G=o.grid,vol=volOf(o,st.data),dec=DEC[st.data],list=[];
   for(let k=0;k<G.nz;k++)for(let j=0;j<G.ny;j++)for(let i=0;i<G.nx;i++){const q=vol[(k*G.ny+j)*G.nx+i];if(!q)continue;const d=dec(q);if(passes(d))list.push(i,j,k,d)}
   const n=list.length/4,m=new THREE.InstancedMesh(new THREE.BoxGeometry(G.dx,G.dz,G.dx),new THREE.MeshLambertMaterial({clippingPlanes:[clip]}),Math.max(1,n));
   for(let p=0;p<n;p++){const i=list[p*4],j=list[p*4+1],k=list[p*4+2],d=list[p*4+3];
@@ -747,8 +780,9 @@ function cloudColours(geo){if(geo.userData.cloud)return;const p=geo.attributes.p
   geo.setAttribute('color',new THREE.BufferAttribute(c,3));geo.userData.cloud=true}
 function buildShells(fr){
   let outer=true;
-  SHELLS[st.data].forEach(([k,,col,key],n)=>{
-    if(!st.on[st.data][k])return;const pct=st.op[st.data][k];if(pct<=0)return;const geo=meshGeo(fr,key);if(!geo)return;
+  const sd=SHELLS[st.data]?st.data:'z';   // shells exist for dBZ, Vel and CC; the extra products show dBZ shells
+  SHELLS[sd].forEach(([k,,col,key],n)=>{
+    if(!st.on[sd][k])return;const pct=st.op[sd][k];if(pct<=0)return;const geo=meshGeo(fr,key);if(!geo)return;
     let o=pct/100;
     if(st.grey){cloudColours(geo);if(outer)o=Math.max(o,0.93);outer=false}
     const solid=o>=0.99;
@@ -762,22 +796,47 @@ function stormCentre(fr){
   for(let k=0;k<N2;k++){let m=0;for(let z=0;z<G.nz;z+=2){const q=v[z*N2+k];if(q>m)m=q}const d=m-32;if(d>=40){const ww=(d-39)*(d-39);sx+=ww*(G.x0+(k%G.nx+0.5)*G.dx);sy+=ww*(G.y0+(Math.floor(k/G.nx)+0.5)*G.dx);w+=ww}}
   return fr.centre=w?{x:sx/w,y:sy/w}:{x:G.x0+G.nx*G.dx/2,y:G.y0+G.ny*G.dx/2};
 }
-function freeOldGeometry(keep){frames.forEach((f,i)=>{if(Math.abs(i-keep)>2&&f.geo){for(const g of Object.values(f.geo))g&&g.dispose();f.geo=null}})}
+function freeOldGeometry(keep){frames.forEach((f,i)=>{if(Math.abs(i-keep)>2&&f.out&&f.out.vx)f.out.vx=null;if(Math.abs(i-keep)>2&&f.geo){for(const g of Object.values(f.geo))g&&g.dispose();f.geo=null}})}
+/* ===== long replays: only the scans near the one on screen keep their full 3D data =====
+   A full scan in 3D is ~10 MB on the phone, so a whole day can't all be kept. Scans more than FULL_WIN away from the one on
+   screen are shrunk to the flat radar picture (dBZ, Vel, CC) plus what the storm sweep needs, and rebuilt in 3D (downloaded
+   again) when you go to them in a 3D view. Short replays (24 scans or fewer) are kept whole, as before. */
+const FULL_WIN=6;
+const isLong=()=>frames.length>24;
+function lighten(fr){if(!fr.out||fr.out.light)return;colMax(fr);velMax(fr);stormCentre(fr);fr.ntilts=fr.out.tilts.length;
+  const o=fr.out,p=o.polar,keep={el:p.el,nrays:p.nrays,rs:p.rs,r0:p.r0,az:p.az};for(const k of['z','v','c'])if(p[k])keep[k]=p[k];
+  fr.out={grid:o.grid,polar:keep,maxz:o.maxz,hasV:o.hasV,hasCC:o.hasCC,extra:o.extra,light:true};
+  if(fr.vtex){for(const t of Object.values(fr.vtex))t.dispose();fr.vtex=null}
+  if(fr.geo){for(const g of Object.values(fr.geo))g&&g.dispose();fr.geo=null}}
+function manageMemory(){if(!isLong())return;frames.forEach((f,i)=>{if(f.state==='ok'&&Math.abs(i-st.t)>FULL_WIN)lighten(f)})}
+const needFull=fr=>!!(fr&&fr.out&&fr.out.light&&(st.view!=='radar'||st.raise||isX(st.data)));
+const rebuilding=new Map();
+function rebuild(i){if(rebuilding.has(i))return rebuilding.get(i);const fr=frames[i],sess=session;if(!fr||!sess)return Promise.resolve();
+  const p=(async()=>{const scan=await Archive.getScan(fr.entry.day,fr.entry,null,sess.abort.signal);const r=await processScan(scan.bytes,scan.method,sess.opt);
+    if(sess!==session||frames[i]!==fr)return;fr.out=r.out;fr.meta=r.meta;if(Math.abs(i-st.t)>FULL_WIN&&isLong())lighten(fr)})()
+    .catch(e=>{if(!sess.abort.signal.aborted)fr.err=e.message}).finally(()=>rebuilding.delete(i));
+  rebuilding.set(i,p);return p}
 function render(){
   meta();if(session&&frames[st.t])applySky(frames[st.t].entry.time,session.site);drawLoadbar();$('time').value=st.t;
   const fr=frames[st.t];
   if(!fr){clearStorm();return}
   if(fr.state!=='ok'){if(fr.state==='bad')status(`Couldn't load ${fmtTime(fr.entry.time)}: ${fr.err}`,true);else status(`Still loading ${fmtTime(fr.entry.time)}…`);return}
   if(frames.every(f=>f.state==='ok'||f.state==='bad'))status(null);else if(!$('status').classList.contains('err'))status(null);
+  manageMemory();
+  if(needFull(fr)){clearStorm();topPlane.visible=false;status(st.view==='radar'&&!st.raise?`Loading ${XINFO[st.data]?XINFO[st.data][1]:'this product'} for ${fmtTime(fr.entry.time)}…`:`Rebuilding ${fmtTime(fr.entry.time)} in 3D…`);const me=st.t;rebuild(me).then(()=>{if(st.t===me)render()});return}
+  if(isLong()&&(st.view!=='radar'||st.raise))for(const j of[st.t+1,st.t+2])if(needFull(frames[j]))rebuild(j);   // get the next scans ready while you watch
   clearStorm();freeOldGeometry(st.t);freeVolTextures(st.t);dropFrame();document.body.classList.toggle('withshells',st.view==='volume'&&st.volShells);
   if(satMesh)satMesh.material.color.setScalar(groundLevel());satBright();if(SAT.mode==='sweep')satSweep();
   const radar=st.view==='radar';
   TOPR=Math.min(150,(fr.out.polar.r0+fr.out.polar.rs*(fr.out.polar.z?fr.out.polar.z.nbins:0))/1000||150);
   topPlane.visible=radar;
+  if(isX(st.data)&&!(fr.out.extra||[]).includes(st.data))status(`This scan has no ${XINFO[st.data][1]}, so it shows reflectivity instead.`,true);
+  else if(isX(st.data)&&st.view==='shells')status(`Shells are only made for dBZ, Vel and CC, so these are dBZ shells. Try Tilts, Blocks or Volume for ${XINFO[st.data][0]}.`);
   if(radar){const key=`${st.t}|${st.data}`;if(key!==topKey){if(topTex)topTex.dispose();topTex=polarTexture(fr,st.data)||polarTexture(fr,'z');topKey=key}
     topPlane.material.map=topTex;topPlane.material.opacity=st.radarOp/100;topPlane.material.needsUpdate=true;topPlane.scale.set(TOPR*2,TOPR*2,1);
     if(st.raise)buildShells(fr)}
-  else if(st.view==='blocks')buildBlocks(fr.out);else if(st.view==='tilts')buildTilts(fr.out);else if(st.view==='volume')buildVolume(fr);else buildShells(fr);
+  else{const want=st.data,miss=isX(want)&&!(fr.out.extra||[]).includes(want);if(miss)st.data='z';   // this scan doesn't have the extra product: draw dBZ
+    try{if(st.view==='blocks')buildBlocks(fr.out);else if(st.view==='tilts')buildTilts(fr.out);else if(st.view==='volume')buildVolume(fr);else buildShells(fr)}finally{st.data=want}}
   storm.scale.y=st.exag;storm.position.y=st.lift;
 }
 
@@ -791,14 +850,14 @@ function lutTex(field,pal){const key=field+pal;if(lutCache[key])return lutCache[
   const t=new THREE.DataTexture(d,256,1,THREE.RGBAFormat);t.needsUpdate=true;t.magFilter=t.minFilter=THREE.LinearFilter;return lutCache[key]=t}
 function tex3(data,G){const t=new THREE.DataTexture3D(data,G.nx,G.ny,G.nz);t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;
   t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return t}
-function volTex(fr,field){fr.vtex=fr.vtex||{};if(fr.vtex[field])return fr.vtex[field];const G=fr.out.grid;let d=fr.out.vol[field];
-  if(field!=='z'){const fillv=field==='v'?64:200;d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
+function volTex(fr,field){fr.vtex=fr.vtex||{};if(fr.vtex[field])return fr.vtex[field];const G=fr.out.grid;let d=volOf(fr.out,field);
+  if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
   return fr.vtex[field]=tex3(d,G)}
 const volMat=new THREE.ShaderMaterial({
-  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()}},
+  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()}},
   vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`precision highp float;precision highp sampler3D;
-uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
+uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform vec2 uDec;uniform float uRange;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
 vec2 hitBox(vec3 o,vec3 d){vec3 inv=1.0/d;vec3 t0=(vec3(-0.5)-o)*inv;vec3 t1=(vec3(0.5)-o)*inv;vec3 a=min(t0,t1);vec3 b=max(t0,t1);return vec2(max(max(a.x,a.y),a.z),min(min(b.x,b.y),b.z));}
 void main(){
   vec3 d=normalize(vPos-uCam);vec2 b=hitBox(uCam,d);if(b.x>b.y)discard;b.x=max(b.x,0.0);
@@ -821,6 +880,7 @@ void main(){
     }
     else if(uField==0){a=smoothstep(uMin,uMin+6.0,dbz)*(0.18+0.82*clamp((dbz-uMin)/40.0,0.0,1.0));col=texture(uLut,vec2((zq+0.5)/256.0,0.5)).rgb;}
     else if(uField==1){float fq=texture(uF,tc).r*255.0;float v=fq-64.0;a=smoothstep(12.0,18.0,dbz)*smoothstep(uMin,uMin+5.0,abs(v))*(0.25+0.75*clamp((abs(v)-uMin)/25.0,0.0,1.0));col=texture(uLut,vec2((fq+0.5)/256.0,0.5)).rgb;}
+    else if(uField==3){float fq=texture(uF,tc).r*255.0;float val=fq*uDec.x+uDec.y;a=smoothstep(15.0,20.0,dbz)*smoothstep(uMin,uMin+uRange,val)*(0.25+0.75*clamp((val-uMin)/(uRange*4.0),0.0,1.0));col=texture(uLut,vec2((fq+0.5)/256.0,0.5)).rgb;}
     else{float fq=texture(uF,tc).r*255.0;float c=fq/200.0;a=smoothstep(25.0,32.0,dbz)*(1.0-smoothstep(uMin-0.05,uMin,c))*(0.3+0.7*clamp((uMin-c)/0.25,0.0,1.0));col=texture(uLut,vec2((fq+0.5)/256.0,0.5)).rgb;}
     a=clamp(a*uOpacity*dt*60.0,0.0,1.0);
     acc.rgb+=(1.0-acc.a)*a*col;acc.a+=(1.0-acc.a)*a;
@@ -851,7 +911,7 @@ function buildVolume(fr){
   const G=fr.out.grid,W=G.nx*G.dx,H=G.nz*G.dz,u=volMat.uniforms;
   volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
   u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
-  u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2}[st.data];u.uMin.value=st.vmin[st.data];
+  u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=st.vmin[st.data];
   u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
   storm.add(volMesh);
   if(st.volShells)buildShells(fr);
@@ -873,42 +933,63 @@ function applyPixelRatio(){const pr=st.view==='volume'?(st.volQ==='low'?1:st.vol
   if(renderer.getPixelRatio()!==pr){renderer.setPixelRatio(pr);resize()}}
 function syncVolMin(){const el=$('vMin'),d=st.data;
   if(d==='z'){el.min=10;el.max=60;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.z+' dBZ'}
-  else if(d==='v'){el.min=5;el.max=40;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.v+' m/s'}
+  else if(d==='v'||d==='r'){el.min=5;el.max=40;el.step=1;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin[d]+' m/s'}
+  else if(d==='w'){el.min=1;el.max=15;el.step=0.5;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.w+' m/s'}
+  else if(d==='d'){el.min=-1;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.d+' dB'}
+  else if(d==='k'){el.min=0;el.max=6;el.step=0.25;$('vMinLbl').textContent='Glow from';$('vMinv').textContent=st.vmin.k+' °/km'}
   else{el.min=0.6;el.max=0.99;el.step=0.01;$('vMinLbl').textContent='Glow below';$('vMinv').textContent=st.vmin.c.toFixed(2)}
   el.value=st.vmin[d]}
 
 /* ================= controls ================= */
 function drawScale(){const sc=$('scale');sc.innerHTML='';const R=st.data==='z'&&st.view==='volume'&&st.volPal==='gr2'?GR2Z:RAMP[st.data];
-  const[a,b,s]=st.data==='z'?[15,76,1]:st.data==='v'?[-35,35,1]:[0.2,1.05,0.0125];
+  const[a,b,s]={z:[15,76,1],v:[-35,35,1],r:[-35,35,1],c:[0.2,1.05,0.0125],w:[0,20,0.25],d:[-2,8,0.125],k:[-1,8,0.125]}[st.data];
   for(let v=a;v<=b;v+=s){const i=document.createElement('i');i.style.background=`rgb(${ramp(R,v).map(Math.round)})`;sc.appendChild(i)}}
 function syncMin(){const m=st.min[st.data][st.view];if(m===undefined)return;const el=$('min');
   if(st.data==='z'){el.min=10;el.max=70;el.step=1;$('minLbl').textContent='Min dBZ'}
-  else if(st.data==='v'){el.min=5;el.max=40;el.step=1;$('minLbl').textContent='Min speed'}
+  else if(st.data==='v'||st.data==='r'){el.min=5;el.max=40;el.step=1;$('minLbl').textContent='Min speed'}
+  else if(st.data==='w'){el.min=1;el.max=15;el.step=0.5;$('minLbl').textContent='Min width'}
+  else if(st.data==='d'){el.min=-1;el.max=6;el.step=0.25;$('minLbl').textContent='Min ZDR'}
+  else if(st.data==='k'){el.min=0;el.max=6;el.step=0.25;$('minLbl').textContent='Min KDP'}
   else{el.min=0.5;el.max=1.05;el.step=0.01;$('minLbl').textContent='Max CC'}
-  el.value=m;$('minv').textContent=st.data==='c'?(+m).toFixed(2):m}
+  el.value=m;$('minv').textContent=minTxt(m)}
+const minTxt=m=>st.data==='c'?(+m).toFixed(2):st.data==='d'||st.data==='k'||st.data==='w'?(+m).toFixed(m%1?2:0):m;
 function drawChips(){
   for(const d of['z','v','c']){const box=$({z:'zChips',v:'vChips',c:'cChips'}[d]);box.querySelectorAll('.chip').forEach(c=>c.remove());
     for(const[k,name,col]of SHELLS[d]){const b=document.createElement('button');b.className='chip';b.setAttribute('aria-pressed',st.on[d][k]);
       b.innerHTML=`<i style="background:#${col.toString(16).padStart(6,'0')}"></i>${name}`;b.onclick=()=>{st.on[d][k]=!st.on[d][k];b.setAttribute('aria-pressed',st.on[d][k]);render()};box.appendChild(b)}}}
 function drawOpac(){const box=$('opac');box.innerHTML='';
-  for(const[k,name,c]of SHELLS[st.data]){const id='op_'+st.data+'_'+k,v=st.op[st.data][k];
+  const sd=SHELLS[st.data]?st.data:'z';
+  for(const[k,name,c]of SHELLS[sd]){const id='op_'+sd+'_'+k,v=st.op[sd][k];
     const r=document.createElement('div');r.className='row';
     r.innerHTML=`<label for="${id}"><i style="background:${st.grey?'#eef1f4':'#'+c.toString(16).padStart(6,'0')}"></i>${name}</label><input id="${id}" type="range" min="0" max="100" step="1" value="${v}"><output>${v===0?'off':v>=100?'solid':v+'%'}</output>`;
     const inp=r.querySelector('input'),out=r.querySelector('output');
-    inp.oninput=()=>{const n=+inp.value;st.op[st.data][k]=n;out.textContent=n===0?'off':n>=100?'solid':n+'%';later(render)};
+    inp.oninput=()=>{const n=+inp.value;st.op[sd][k]=n;out.textContent=n===0?'off':n>=100?'solid':n+'%';later(render)};
     box.appendChild(r)}}
 function setView(v){const was=st.view;st.view=v;document.body.dataset.view=v;
   [['radar','vRadar'],['tilts','vTilts'],['blocks','vBlocks'],['shells','vShells'],['volume','vVolume']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===v));
   if(v==='volume'){let ok=null;try{ok=localStorage.getItem('hist-volwarn')}catch(e){}if(!ok)$('volWarn').hidden=false}
   applyPixelRatio();syncMin();syncVolMin();drawScale();render();if((v==='radar')!==(was==='radar'))home()}
 function setData(d,quiet){st.data=d;document.body.dataset.data=d;[['z','dZ'],['v','dV'],['c','dC']].forEach(([k,id])=>$(id).setAttribute('aria-pressed',k===d));
+  $('dX').setAttribute('aria-pressed',isX(d));$('dX').textContent=isX(d)?XINFO[d][0]:'More';
   topKey='';drawScale();drawOpac();syncMin();syncVolMin();if(!quiet)render()}
 $('vVolume').onclick=()=>setView('volume');$('vRadar').onclick=()=>setView('radar');$('vTilts').onclick=()=>setView('tilts');$('vBlocks').onclick=()=>setView('blocks');$('vShells').onclick=()=>setView('shells');
 $('dZ').onclick=()=>setData('z');$('dV').onclick=()=>setData('v');$('dC').onclick=()=>setData('c');
+/* "More": the extra products the archive keeps in every scan, when this radar recorded them */
+const XINFO={w:['SW','Spectrum Width','How messy the wind is inside each spot. High values often show up at tornadoes, strong rotation and turbulent outflow.'],
+  d:['ZDR','Differential Reflectivity (ZDR)','The shape of what the radar sees. Big flat raindrops read high; hail and tumbling debris read near zero. Helps find big hail and the updraft.'],
+  k:['KDP','Specific Differential Phase (KDP)','How much water is packed in. High KDP means very heavy rain, good for spotting flash-flood cores.'],
+  r:['Raw V','Raw Velocity','Wind toward and away from the radar before BoM cleans it up. Shows folded (aliased) patches that Vel has fixed.']};
+function xHave(){const s=new Set();for(const f of frames)if(f.state==='ok'&&f.out&&f.out.extra)for(const k of f.out.extra)s.add(k);return s}
+function drawXMenu(){const have=xHave(),loaded=frames.some(f=>f.state==='ok');
+  $('xList').innerHTML=XKEYS.map(k=>`<button class="xopt" data-k="${k}" aria-pressed="${st.data===k}" ${loaded&&!have.has(k)?'disabled':''}><b>${XINFO[k][1]}</b><small>${loaded&&!have.has(k)?'Not recorded by this radar on this day.':XINFO[k][2]}</small></button>`).join('')+
+    (loaded?'':'<p style="margin:0;color:var(--muted);font-size:.8rem">Build a storm first to see which of these this radar recorded.</p>');
+  $('xList').querySelectorAll('.xopt').forEach(b=>b.onclick=()=>{$('xMenu').hidden=true;setData(b.dataset.k)})}
+$('dX').onclick=()=>{drawXMenu();$('xMenu').hidden=false};$('xClose').onclick=()=>$('xMenu').hidden=true;
+$('xMenu').addEventListener('click',e=>{if(e.target.id==='xMenu')$('xMenu').hidden=true});
 let deb=null;const later=f=>{clearTimeout(deb);deb=setTimeout(f,90)};
 $('time').oninput=()=>{st.t=+$('time').value;meta();drawLoadbar();later(render)};
 $('prev').onclick=()=>{if(st.t>0){st.t--;render()}};$('next').onclick=()=>{if(st.t<frames.length-1){st.t++;render()}};
-$('min').oninput=()=>{st.min[st.data][st.view]=+$('min').value;$('minv').textContent=st.data==='c'?(+$('min').value).toFixed(2):$('min').value;later(render)};
+$('min').oninput=()=>{st.min[st.data][st.view]=+$('min').value;$('minv').textContent=minTxt(+$('min').value);later(render)};
 $('spread').oninput=()=>{st.spread=+$('spread').value;$('spreadv').textContent=st.spread;later(render)};
 $('radarOp').oninput=()=>{st.radarOp=+$('radarOp').value;$('radarOpv').textContent=st.radarOp+'%';topPlane.material.opacity=st.radarOp/100};
 $('lift').oninput=()=>{st.lift=+$('lift').value;$('liftv').textContent=st.lift+' km';storm.position.y=st.lift;if(st.view==='volume')later(render)};
@@ -925,7 +1006,7 @@ $('fold').onclick=()=>{const open=$('fold').getAttribute('aria-expanded')!=='tru
 let playing=false;
 $('play').onclick=async()=>{playing=!playing;$('play').setAttribute('aria-pressed',playing);$('play').textContent=playing?'Pause':'Play';
   while(playing){const ready=frames.map((f,i)=>f.state==='ok'?i:-1).filter(i=>i>=0);if(!ready.length){await new Promise(r=>setTimeout(r,500));continue}
-    const nx=ready.find(i=>i>st.t)??ready[0];st.t=nx;render();await new Promise(r=>setTimeout(r,700))}};
+    const nx=ready.find(i=>i>st.t)??ready[0];if(needFull(frames[nx]))await rebuild(nx);if(!playing)break;st.t=nx;render();await new Promise(r=>setTimeout(r,isLong()&&st.view==='radar'?350:700))}};
 $('spin').onclick=()=>{controls.autoRotate=!controls.autoRotate;$('spin').setAttribute('aria-pressed',controls.autoRotate)};
 /* close-up centre: tap the map */
 $('focusBtn').onclick=()=>{const on=!document.body.classList.contains('picking');document.body.classList.toggle('picking',on);$('focusBtn').setAttribute('aria-pressed',on);

@@ -17,10 +17,10 @@ self.onmessage = async (e) => {
     if (!vol.sweeps.length) throw new Error('No reflectivity in this scan.');
     const out = RadarCore.process(vol, opt);
     const tr = [];
-    for (const t of out.tilts) tr.push(t.z.buffer, t.v.buffer, t.c.buffer, t.h.buffer);
+    for (const t of out.tilts) { tr.push(t.z.buffer, t.v.buffer, t.c.buffer, t.h.buffer); for (const k of out.extra || []) if (t[k]) tr.push(t[k].buffer); }
     tr.push(out.vol.z.buffer, out.vol.v.buffer, out.vol.c.buffer);
     for (const m of Object.values(out.meshes)) tr.push(m.pos.buffer, m.idx.buffer);
-    for (const k of ['z', 'v', 'c']) if (out.polar[k]) tr.push(out.polar[k].q.buffer);
+    for (const k of ['z', 'v', 'c', ...(out.extra || [])]) if (out.polar[k]) tr.push(out.polar[k].q.buffer);
     self.postMessage({ id, ok: true, out, meta: vol.meta }, tr);
   } catch (err) {
     self.postMessage({ id, ok: false, error: String(err && err.message || err) });
