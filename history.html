@@ -233,10 +233,10 @@ body.picking #scene{cursor:crosshair}
     <div class="chips" data-views="volume"><span class="lbl">Quality</span><button class="chip sel" id="qLow" aria-pressed="false">Low</button><button class="chip sel" id="qMed" aria-pressed="true">Medium</button><button class="chip sel" id="qHigh" aria-pressed="false">High</button></div>
     <div class="row" data-views="volume"><label for="vOp">Fog density</label><input id="vOp" type="range" min="10" max="100" value="40"><output id="vOpv">40%</output></div>
     <div class="row" data-views="volume"><label for="vMin" id="vMinLbl">Glow from</label><input id="vMin" type="range" min="10" max="60" value="25"><output id="vMinv">25</output></div>
-    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="solid">Solid (GR2)</button><button class="chip sel" data-look="paint">Painted</button><button class="chip sel" data-look="surf">Shells</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="band">Banded</button><button class="chip sel" data-look="glow">Glow</button></div>
-    <div class="chips" data-views="volume" id="lightRow"><span class="lbl">Light from</span><button class="chip sel" id="lEye">Camera</button><button class="chip sel" id="lSun">Sun</button></div>
+    <div class="chips" data-views="volume" id="lookRow"><span class="lbl">Look</span><button class="chip sel" data-look="glow">Glow</button><button class="chip sel" data-look="lit">Lit</button><button class="chip sel" data-look="solid">Solid (GR2)</button></div>
     <div class="row" data-views="volume" id="difRow"><label for="vDif">Shading</label><input id="vDif" type="range" min="0" max="100" value="65"><output id="vDifv">65%</output></div>
-    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button><button class="chip sel" id="vSmooth">Smooth</button><button class="chip sel" id="vFloor">Radar on floor</button><button class="chip sel" id="vBlack">Black background</button></div>
+    <div class="chips" data-views="volume"><span class="lbl">Style</span><button class="chip sel" id="vPal" aria-pressed="true">GR2 colours</button><button class="chip sel" id="vBox" aria-pressed="true">Box &amp; heights</button><button class="chip sel" id="vShell" aria-pressed="false">Shells inside</button><button class="chip sel" id="vCloud" aria-pressed="false">Cloud look</button><button class="chip sel" id="vFloor">Radar on floor</button></div>
+    <div class="chips" data-views="volume" id="cloudRow" hidden><span class="lbl">Cloud</span><button class="chip sel" id="lSun">Sun light</button><button class="chip sel" id="lEye">Camera light</button><button class="chip sel" id="vBlack">Black background</button><button class="chip sel" id="vSmooth">Smooth</button></div>
     <div class="note warnnote" data-views="volume">Volume render is heavy on older phones. If it stutters, pick Low.</div>
     <div class="chips shellchips" id="zChips"><span class="lbl">dBZ shells</span></div>
     <div class="chips shellchips" id="vChips"><span class="lbl">Wind shells</span></div>
@@ -292,7 +292,7 @@ function status(msg,err){const s=$('status');if(!msg){s.hidden=true;return}s.hid
 const VLOOK={glow:0,lit:1,band:2,surf:3,solid:4,paint:5};
 const VM=()=>st.volLook==='solid'||st.volLook==='paint'?st.vminS:st.vmin;   // the Solid look has its own surface strength (GR2 users usually pick 40-50 dBZ)
 const sget=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},sset=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const st={volLook:sget('hist-vlook2','solid'),volLight:sget('hist-vlight','eye'),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volBlack:sget('hist-vblack','1')==='1',volSmooth:sget('hist-vsmooth','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
+const st={volLook:(v=>['glow','lit','solid'].includes(v)?v:'glow')(sget('hist-vlook3','glow')),volLight:sget('hist-clight','sun'),volDif:+sget('hist-vdif','65'),volFloor:sget('hist-vfloor','1')==='1',volBlack:sget('hist-cblack','0')==='1',volSmooth:sget('hist-csmooth','1')==='1',volQ:'med',volOp:40,vmin:{z:25,v:15,c:0.95,w:5,d:2,k:1,r:15},vminS:{z:45,v:25,c:0.9,w:8,d:3,k:2,r:25},volPal:'gr2',volBox:true,volShells:false,view:'radar',data:'z',t:0,min:{z:{tilts:25,blocks:45},v:{tilts:15,blocks:20},c:{tilts:1.05,blocks:0.95},w:{tilts:4,blocks:6},d:{tilts:1,blocks:2.5},k:{tilts:0.5,blocks:1.5},r:{tilts:15,blocks:20}},spread:0,exag:2.5,lift:0,radarOp:90,sat:true,names:true,cut:-150,raise:false,grey:false,
   op:{z:{20:13,40:28,50:50,60:95},v:{in15:22,in25:85,out15:22,out25:85},c:{cc90:35,cc80:95}},
   on:{z:{20:true,40:true,50:true,60:true},v:{in15:true,in25:true,out15:true,out25:true},c:{cc90:true,cc80:true}}};
 const SHELLS={
@@ -838,7 +838,7 @@ function render(){
   const radar=st.view==='radar';
   TOPR=Math.min(150,(fr.out.polar.r0+fr.out.polar.rs*(fr.out.polar.z?fr.out.polar.z.nbins:0))/1000||150);
   const floor=radar||(st.view==='volume'&&st.volFloor);topPlane.visible=floor;   // GR2 style: the flat radar on the floor under the 3D storm
-  skyMode(st.view==='volume'&&st.volBlack);
+  skyMode(st.view==='volume'&&st.grey&&st.volBlack);
   if(isX(st.data)&&!(fr.out.extra||[]).includes(st.data))status(`This scan has no ${XINFO[st.data][1]}, so it shows reflectivity instead.`,true);
   else if(isX(st.data)&&st.view==='shells')status(`Shells are only made for dBZ, Vel and CC, so these are dBZ shells. Try Tilts, Blocks or Volume for ${XINFO[st.data][0]}.`);
   if(floor){const key=`${st.t}|${st.data}`;if(key!==topKey){if(topTex)topTex.dispose();topTex=polarTexture(fr,st.data)||polarTexture(fr,'z');topKey=key}
@@ -866,16 +866,34 @@ function smooth3(src,G,fillv){const nx=G.nx,ny=G.ny,nz=G.nz,N2=nx*ny,o=new Uint8
   for(let k=0;k<nz;k++)for(let i=0;i<nx;i++)for(let j=0;j<ny;j++){let s=0,n=0;for(let d=-1;d<=1;d++){const jj=j+d;if(jj<0||jj>=ny)continue;s+=a[k*N2+jj*nx+i];n++}b[k*N2+j*nx+i]=s/n}
   for(let k=0;k<nz;k++)for(let x=0;x<N2;x++){let s=0,n=0;for(let d=-1;d<=1;d++){const kk=k+d;if(kk<0||kk>=nz)continue;s+=b[kk*N2+x];n++}const v=s/n;o[k*N2+x]=v<fillv+0.5&&!src[k*N2+x]?0:Math.max(1,Math.min(255,Math.round(v)))}
   return o}
-function volTex(fr,field){const tk=field+(st.volSmooth?'s':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
-  if(st.volSmooth)d=smooth3(d,G,field==='z'?0:{v:64,r:64,c:200,w:1,d:121,k:41}[field]);
+function volTex(fr,field){const sm=st.grey&&st.volSmooth,tk=field+(sm?'s':'');fr.vtex=fr.vtex||{};if(fr.vtex[tk])return fr.vtex[tk];const G=fr.out.grid;let d=volOf(fr.out,field);
+  if(sm)d=smooth3(d,G,field==='z'?0:{v:64,r:64,c:200,w:1,d:121,k:41}[field]);
   if(field!=='z'){const fillv={v:64,r:64,c:200,w:1,d:121,k:41}[field];d=d.slice();for(let i=0;i<d.length;i++)if(!d[i])d[i]=fillv}   // empty air = calm / pure rain, so smoothing can't invent values
   return fr.vtex[tk]=tex3(d,G)}
 const volMat=new THREE.ShaderMaterial({
-  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)},uAmb:{value:0.35}},
+  uniforms:{uCloud:{value:0},uSunDir:{value:new THREE.Vector3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},uSky:{value:new THREE.Color(0.5,0.6,0.7)},uZ:{value:null},uF:{value:null},uLut:{value:null},uField:{value:0},uDec:{value:new THREE.Vector2(1,0)},uRange:{value:1},uMin:{value:25},uOpacity:{value:0.55},uSteps:{value:190},uCut:{value:-1},uCam:{value:new THREE.Vector3()},uLook:{value:1},uScale:{value:new THREE.Vector3(1,1,1)},uVox:{value:new THREE.Vector3(0.01,0.01,0.03)},uLight:{value:new THREE.Vector3(0.4,0.8,0.4)},uAmb:{value:0.35},uNoise:{value:null},uReal:{value:new THREE.Vector3(1,1,1)},uBase:{value:1.5}},
   vertexShader:`varying vec3 vPos;void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
   fragmentShader:`precision highp float;precision highp sampler3D;
 uniform int uCloud;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uSky;uniform sampler3D uZ;uniform sampler3D uF;uniform sampler2D uLut;uniform int uField;uniform vec2 uDec;uniform float uRange;uniform float uMin;uniform float uOpacity;uniform float uSteps;uniform float uCut;uniform vec3 uCam;varying vec3 vPos;
-uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;uniform float uAmb;
+uniform int uLook;uniform vec3 uScale;uniform vec3 uVox;uniform vec3 uLight;uniform float uAmb;uniform sampler3D uNoise;uniform vec3 uReal;uniform float uBase;
+/* ---- realistic cloud ----
+   The radar shows where rain and hail are; the cloud is drawn around that: billowy edges come from a 3D noise pattern
+   (cauliflower towers), a flat base near 1.5 km, and rain shafts hanging below it where the radar shows heavy rain.
+   Lighting: each point looks toward the sun through the cloud (self-shadowing), with forward scattering (silver lining)
+   and soft light from the sky. Physics uses real kilometres, so the height stretch doesn't change how thick it looks. */
+float cloudDens(vec3 p,out float rain){vec3 tc=vec3(p.x+0.5,0.5-p.z,p.y+0.5);float dbz=texture(uZ,tc).r*255.0-32.0;rain=0.0;
+  float cov=smoothstep(uMin-14.0,uMin+14.0,dbz);if(cov<=0.0)return 0.0;
+  vec3 k=vec3(p.x*uReal.x,(p.y+0.5)*uReal.y,p.z*uReal.z);float hkm=k.y;
+  float n=texture(uNoise,k/16.0).r,n2=texture(uNoise,k/5.0+vec3(0.31,0.17,0.73)).r;   // billows ~2 km across, detail ~0.6 km
+  float shape=n*0.8+n2*0.2;   // big cauliflower billows, a little fine detail
+  float d=clamp((cov-(1.0-shape)*0.85)/max(1.0-(1.0-shape)*0.85,0.05),0.0,1.0);d=smoothstep(0.0,0.35,d);   // crisp edges, like real towers
+  float baseFade=smoothstep(uBase-0.2,uBase+0.45,hkm);
+  if(hkm<uBase+0.3){float streak=texture(uNoise,vec3(k.x/1.2,k.y/9.0,k.z/1.2)).r;rain=smoothstep(28.0,52.0,dbz)*(0.35+0.65*streak)*(1.0-baseFade*0.7);}
+  return d*baseFade;}
+float cloudShadow(vec3 p){float od=0.0;float sl=0.55/max(length(uSunDir*uReal),1e-3);vec3 s=normalize(uSunDir);
+  for(int j=1;j<=6;j++){float tj=float(j)*float(j)*0.5;vec3 q=p+s*(sl*tj);if(abs(q.x)>0.5||abs(q.z)>0.5||q.y>0.5||q.y<-0.5)break;float r;od+=(cloudDens(q,r)+r*0.3)*0.55*float(j);}
+  return od;}
+float hg(float c,float g){float g2=g*g;return (1.0-g2)/(12.566*pow(max(1.0+g2-2.0*g*c,1e-3),1.5));}
 /* strength of what's shown at a point, on a common scale: 0 = just visible (the slider), ~20+ = strong.
    lq returns the colour-table index for that point. */
 float strength(vec3 tc,out float lq){float zq=texture(uZ,tc).r*255.0;float dbz=zq-32.0;
@@ -899,6 +917,27 @@ void main(){
   float dt=1.0/uSteps;float t=b.x+dt*fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);
   vec4 acc=vec4(0.0);
   vec3 vd=normalize(d*uScale);   // view direction in real-world proportions
+  if(uCloud==1){
+    float T=1.0;vec3 L=vec3(0.0);float segKm=length(d*uReal)*dt;vec3 sd=normalize(uSunDir*uReal);float cosT=dot(normalize(d*uReal),sd);
+    float ph=mix(hg(cosT,0.6),hg(cosT,-0.25),0.3)*12.566;   // silver lining toward the sun, softer glow away from it
+    for(int i=0;i<1400;i++){
+      if(t>b.y||T<0.03)break;
+      vec3 p=uCam+d*t;
+      if(p.x<uCut){t+=dt;continue;}
+      float rain;float dn=cloudDens(p,rain);
+      if(dn+rain<0.002){t+=dt*1.6;continue;}   // empty air: step faster
+      float stp=dn>0.02?0.5:1.0;   // inside the cloud: smaller steps so the edges come out crisp, not grainy
+      float h01=clamp(p.y+0.5,0.0,1.0);
+      float ext=dn*2.2+rain*0.35;float a=1.0-exp(-ext*segKm*stp);
+      float od=cloudShadow(p);
+      float Tl=exp(-od*0.75),ms=exp(-od*0.18)*0.22;          // direct sun through the cloud + light bounced around inside it
+      float powder=1.0-exp(-dn*2.0);
+      vec3 sky=uSky*(0.45+0.5*h01);
+      vec3 sunL=uSunCol*(Tl*(ph+0.35)*mix(0.5,1.0,powder)*1.45+ms);
+      vec3 c=dn>rain*0.5?sunL+sky*0.3*(0.4+0.6*Tl):(sky*0.5+uSunCol*Tl*0.12)*vec3(0.78,0.8,0.86);   // rain shafts: dull grey
+      L+=T*a*c;T*=1.0-a;t+=dt*stp;}
+    float A=1.0-T;if(A<0.004)discard;vec3 C=L/A;C=1.0-exp(-C*1.15);   // camera-like exposure, so bright cloud keeps its shading instead of going flat white
+    gl_FragColor=vec4(C,A);return;}
   if(uCloud==0&&(uLook==4||uLook==5)){   // SOLID (4) / PAINTED (5) (GR2 style): one solid skin at the slider's strength, one colour, lit by diffuse + ambient light
     bool first=true;
     for(int i=0;i<1400;i++){
@@ -978,14 +1017,34 @@ void main(){
   gl_FragColor=vec4(acc.rgb/acc.a,acc.a);
 }`,
   transparent:true,depthWrite:false,depthTest:false,side:THREE.BackSide});
+/* tileable 3D noise for the cloud's billows: smooth noise mixed with cell (cauliflower) noise, made once on the phone */
+let cloudNoise=null;
+function makeCloudNoise(){if(cloudNoise)return cloudNoise;const S=64,P=8,o=new Uint8Array(S*S*S);
+  const hsh=(x,y,z)=>{let q=(Math.imul(((x%P)+P)%P,374761393)+Math.imul(((y%P)+P)%P,668265263)+Math.imul(((z%P)+P)%P,1274126177))|0;q=Math.imul(q^(q>>>13),1274126177);q^=q>>>16;return(q>>>0)/4294967295};
+  const fp=[];for(let x=0;x<P;x++)for(let y=0;y<P;y++)for(let z=0;z<P;z++)fp.push([x+hsh(x,y,z),y+hsh(y,z,x+7),z+hsh(z,x,y+13)]);
+  const sm=t=>t*t*(3-2*t);
+  const vn=(x,y,z,f)=>{x*=f;y*=f;z*=f;const X=Math.floor(x),Y=Math.floor(y),Z=Math.floor(z),u=sm(x-X),v=sm(y-Y),w=sm(z-Z);let r=0;
+    for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++)for(let dz=0;dz<2;dz++){const wx=dx?u:1-u,wy=dy?v:1-v,wz=dz?w:1-w;r+=wx*wy*wz*hsh((X+dx)%(P*f),(Y+dy)%(P*f),(Z+dz)%(P*f))}return r};
+  for(let k=0;k<S;k++)for(let j=0;j<S;j++)for(let i=0;i<S;i++){const x=i/S*P,y=j/S*P,z=k/S*P;
+    let best=9;for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const cx=Math.floor(x)+a,cy=Math.floor(y)+b,cz=Math.floor(z)+c;
+      const f=fp[(((cx%P)+P)%P)*P*P+(((cy%P)+P)%P)*P+(((cz%P)+P)%P)];const fx=f[0]-((cx%P)+P)%P+cx,fy=f[1]-((cy%P)+P)%P+cy,fz=f[2]-((cz%P)+P)%P+cz;
+      const dd=(x-fx)**2+(y-fy)**2+(z-fz)**2;if(dd<best)best=dd}
+    const worley=1-Math.min(1,Math.sqrt(best));
+    const fbm=vn(x,y,z,1)*0.55+vn(x*2,y*2,z*2,1)*0.3+vn(x*4,y*4,z*4,1)*0.15;
+    o[(k*S+j)*S+i]=Math.round(Math.max(0,Math.min(1,worley*0.62+fbm*0.48-0.05))*255)}
+  {let mn=255,mx=0;for(const v of o){if(v<mn)mn=v;if(v>mx)mx=v}const sc=255/Math.max(1,mx-mn);for(let i=0;i<o.length;i++)o[i]=Math.round((o[i]-mn)*sc)}   // use the full range
+  const t=new THREE.DataTexture3D(o,S,S,S);t.format=THREE.RedFormat;t.type=THREE.UnsignedByteType;t.minFilter=t.magFilter=THREE.LinearFilter;
+  t.wrapS=t.wrapT=t.wrapR=THREE.RepeatWrapping;t.unpackAlignment=1;t.needsUpdate=true;return cloudNoise=t}
 const volMesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),volMat);volMesh.userData.keep=true;volMesh.renderOrder=20;volMesh.frustumCulled=false;
 const _inv=new THREE.Matrix4();
 const _sd=new THREE.Vector3();
 function updateVolCam(){if(!volMesh.parent)return;volMesh.updateMatrixWorld();_inv.copy(volMesh.matrixWorld).invert();volMat.uniforms.uCam.value.copy(camera.position).applyMatrix4(_inv);
   _sd.copy(SKY.dir).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd);
-  if(st.volLight==='eye'){camera.getWorldDirection(_fw);_up.copy(camera.up).applyQuaternion(camera.quaternion);_rt.crossVectors(_fw,_up).normalize();
+  const lm=st.grey?st.volLight:st.volLook==='solid'?'eye':'sun';   // Lit uses the sun, Solid the camera (like GR2), Cloud whatever you pick
+  if(lm==='eye'){camera.getWorldDirection(_fw);_up.copy(camera.up).applyQuaternion(camera.quaternion);_rt.crossVectors(_fw,_up).normalize();
     volMat.uniforms.uLight.value.copy(_fw).multiplyScalar(-1).addScaledVector(_up,0.55).addScaledVector(_rt,-0.35).normalize()}   // like GR2's "eye space": light comes from just above-left of you
-  else volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize()}
+  else volMat.uniforms.uLight.value.set(SKY.dir.x,Math.max(SKY.dir.y,0.55),SKY.dir.z).normalize();
+  if(st.grey&&lm==='eye'){_sd.copy(volMat.uniforms.uLight.value).transformDirection(_inv);volMat.uniforms.uSunDir.value.copy(_sd)}}
 const _fw=new THREE.Vector3(),_up=new THREE.Vector3(),_rt=new THREE.Vector3();   // light for the lit looks: the sun, kept fairly high so storms never go black
 let frameGroup=null,FRAME_LABELS=[];
 function dropFrame(){if(frameGroup){world.remove(frameGroup);disposeTree(frameGroup);frameGroup=null}FRAME_LABELS=[]}
@@ -1006,7 +1065,7 @@ function buildVolume(fr){
   volMesh.scale.set(W,H,W);volMesh.position.set(G.x0+W/2,H/2,-(G.y0+W/2));
   u.uZ.value=volTex(fr,'z');u.uF.value=st.data==='z'?u.uZ.value:volTex(fr,st.data);
   u.uLut.value=lutTex(st.data,st.volPal);u.uField.value={z:0,v:1,c:2,r:1,w:3,d:3,k:3}[st.data];const xd={w:[0.1,-0.1,3],d:[1/15,-8-1/15,1],k:[0.05,-2.05,0.8]}[st.data];if(xd){u.uDec.value.set(xd[0],xd[1]);u.uRange.value=xd[2]}u.uMin.value=VM()[st.data];
-  u.uCloud.value=st.grey&&st.data==='z'?1:0;u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
+  u.uCloud.value=st.grey&&st.data==='z'?1:0;if(u.uCloud.value){u.uNoise.value=makeCloudNoise();u.uReal.value.set(W,H,W)}u.uLook.value=VLOOK[st.volLook];u.uAmb.value=1-st.volDif/100;u.uScale.value.set(W,H*st.exag,W);u.uVox.value.set(1/G.nx,1/G.ny,1/G.nz);u.uOpacity.value=st.volOp/100*(st.grey&&st.data==='z'?1.6:1);u.uSteps.value=VOL_STEPS[st.volQ];u.uCut.value=st.cut<=-150?-1:(st.cut-(G.x0+W/2))/W;
   storm.add(volMesh);
   if(st.volShells)buildShells(fr);
   buildFrame(G);
@@ -1089,7 +1148,7 @@ $('radarOp').oninput=()=>{st.radarOp=+$('radarOp').value;$('radarOpv').textConte
 $('lift').oninput=()=>{st.lift=+$('lift').value;$('liftv').textContent=st.lift+' km';storm.position.y=st.lift;if(st.view==='volume')later(render)};
 $('exag').oninput=()=>{st.exag=+$('exag').value;$('exagv').textContent=st.exag;storm.scale.y=st.exag;meta();if(st.view==='tilts'||st.view==='volume')later(render)};
 $('cut').oninput=()=>{st.cut=+$('cut').value;clip.constant=-st.cut;if(st.view==='volume')later(render);$('cutv').textContent=st.cut<=-150?'off':(st.cut<0?`${-st.cut} km W`:`${st.cut} km E`)};
-function setCloud(on){st.grey=on;$('grey').setAttribute('aria-pressed',on);$('vCloud').setAttribute('aria-pressed',on);drawOpac();render()}
+function setCloud(on){st.grey=on;$('grey').setAttribute('aria-pressed',on);$('vCloud').setAttribute('aria-pressed',on);syncLook();drawOpac();render()}
 $('grey').onclick=()=>setCloud(!st.grey);$('vCloud').onclick=()=>setCloud(!st.grey);
 $('opReset').onclick=()=>{st.op=JSON.parse(JSON.stringify(OP_DEFAULT));drawOpac();render()};
 $('raise').onclick=()=>{st.raise=!st.raise;document.body.classList.toggle('raised',st.raise);$('raise').setAttribute('aria-pressed',st.raise);render();
@@ -1129,13 +1188,13 @@ $('vMin').oninput=()=>{VM()[st.data]=+$('vMin').value;syncVolMin();volMat.unifor
 function syncLook(){document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.look===st.volLook));
   $('lEye').setAttribute('aria-pressed',st.volLight==='eye');$('lSun').setAttribute('aria-pressed',st.volLight==='sun');$('vDif').value=st.volDif;$('vDifv').textContent=st.volDif+'%';
   $('vFloor').setAttribute('aria-pressed',st.volFloor);$('vSmooth').setAttribute('aria-pressed',st.volSmooth);$('vBlack').setAttribute('aria-pressed',st.volBlack);
-  $('lightRow').hidden=$('difRow').hidden=st.volLook==='glow';$('vMinLbl').textContent=st.volLook==='solid'||st.volLook==='paint'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
-$('lEye').onclick=()=>{st.volLight='eye';sset('hist-vlight','eye');syncLook();render()};$('lSun').onclick=()=>{st.volLight='sun';sset('hist-vlight','sun');syncLook();render()};
+  $('cloudRow').hidden=!st.grey;$('difRow').hidden=st.volLook==='glow'||st.grey;$('vMinLbl').textContent=st.volLook==='solid'||st.volLook==='paint'?'Surface at':st.data==='c'?'Glow below':'Glow from'}
+$('lEye').onclick=()=>{st.volLight='eye';sset('hist-clight','eye');syncLook();render()};$('lSun').onclick=()=>{st.volLight='sun';sset('hist-clight','sun');syncLook();render()};
 $('vDif').oninput=()=>{st.volDif=+$('vDif').value;sset('hist-vdif',st.volDif);$('vDifv').textContent=st.volDif+'%';volMat.uniforms.uAmb.value=1-st.volDif/100};
-$('vSmooth').onclick=()=>{st.volSmooth=!st.volSmooth;sset('hist-vsmooth',st.volSmooth?'1':'0');syncLook();render()};
+$('vSmooth').onclick=()=>{st.volSmooth=!st.volSmooth;sset('hist-csmooth',st.volSmooth?'1':'0');syncLook();render()};
 $('vFloor').onclick=()=>{st.volFloor=!st.volFloor;sset('hist-vfloor',st.volFloor?'1':'0');syncLook();render()};
-$('vBlack').onclick=()=>{st.volBlack=!st.volBlack;sset('hist-vblack',st.volBlack?'1':'0');syncLook();render()};
-document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;sset('hist-vlook2',st.volLook);syncLook();syncVolMin();render()});syncLook();
+$('vBlack').onclick=()=>{st.volBlack=!st.volBlack;sset('hist-cblack',st.volBlack?'1':'0');syncLook();render()};
+document.querySelectorAll('#lookRow [data-look]').forEach(b=>b.onclick=()=>{st.volLook=b.dataset.look;sset('hist-vlook3',st.volLook);syncLook();syncVolMin();render()});syncLook();
 $('vPal').onclick=()=>{st.volPal=st.volPal==='gr2'?'rs':'gr2';$('vPal').setAttribute('aria-pressed',st.volPal==='gr2');$('vPal').textContent=st.volPal==='gr2'?'GR2 colours':'RadarScope colours';drawScale();render()};
 $('vBox').onclick=()=>{st.volBox=!st.volBox;$('vBox').setAttribute('aria-pressed',st.volBox);render()};
 $('vShell').onclick=()=>{st.volShells=!st.volShells;$('vShell').setAttribute('aria-pressed',st.volShells);render()};
