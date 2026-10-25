@@ -4,9 +4,10 @@ const MC_TRI=new Int32Array([-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,8
    Runs inside a Web Worker on the phone. No DOM, no three.js.
    Output units: km. Scene axes: x = east, y = up, z = south (so north is -z). */
 const RE = 6371000 * 4 / 3;               // 4/3 Earth radius beam model
-const FIELD_PREF = { z: ['DBZH_CLEAN', 'DBZH', 'TH'], v: ['VRADDH', 'VRADH'], c: ['RHOHV'], w: ['WRADH', 'WRAD'], d: ['ZDR'], k: ['KDP'] };
+const FIELD_PREF = { z: ['DBZH', 'DBZH_CLEAN', 'TH'], v: ['VRADH', 'VRADDH'], c: ['RHOHV'], w: ['WRADH', 'WRAD'], d: ['ZDR'], k: ['KDP'] };
 /* extra products (only kept as flat tilts, not full 3D volumes, to save memory):
-   w = spectrum width (m/s), d = ZDR (dB), k = KDP (deg/km), r = raw velocity before BoM's cleanup (m/s).
+   w = spectrum width (m/s), d = ZDR (dB), k = KDP (deg/km), r = BoM's cleaned (dealiased) velocity (m/s).
+   The main velocity (v) is the raw one, which has fewer glitches; the cleaned one is the extra.
    Stored as one byte each: these encoders must match the decoders in history.html. */
 const EXTRA = ['w', 'd', 'k', 'r'];
 const ENC = {
@@ -61,7 +62,7 @@ function readVolume(f) {
       const name = names.find(n => quant[n]);
       if (name) fields[key] = field(name);
     }
-    if (fields.v && fields.v.name === 'VRADDH' && quant.VRADH) fields.r = field('VRADH');   // raw velocity, only when BoM also gives a cleaned one
+    if (fields.v && fields.v.name === 'VRADH' && quant.VRADDH) fields.r = field('VRADDH');   // BoM's cleaned velocity, when it has one
     if (!fields.z) continue;
     sweeps.push({ el, nrays, nbins, rs, r0, az, fields });
   }
