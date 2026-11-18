@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archive Check</title>
+<style>
+:root{--bg:#05080c;--fg:#dce6ee;--muted:#8696a5;--ok:#4fd27a;--bad:#ff6b6b;--line:#253445;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px ui-sans-serif,system-ui,sans-serif;margin:0;padding:24px 16px;max-width:640px;margin-inline:auto}
+h1{font-size:1.2rem;margin:0 0 6px}p{color:var(--muted);margin:0 0 14px;line-height:1.45}
+label{display:block;color:var(--muted);font-size:.85rem;margin:10px 0 4px}
+select,input,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--line);background:#111a24;color:var(--fg)}
+button{background:#bf5af2;color:#000;font-weight:700;border:0;margin:14px 0}
+.row{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;word-break:break-word}
+.row b{display:block;margin-bottom:4px}.ok{color:var(--ok)}.bad{color:var(--bad)}.wait{color:var(--muted)}
+.more{display:block;color:var(--muted);font-size:.82rem;margin-top:4px;line-height:1.4;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>Archive check</h1>
+<p>Compares a day that works with the day that doesn't. Pick the radar and the broken day, tap Check, wait until every line finishes (up to a couple of minutes), then screenshot the whole page.</p>
+<label for="site">Radar</label><select id="site"><option>Loading radar list…</option></select>
+<label for="bad">Day that fails (UTC date)</label><input id="bad" type="date" value="2026-11-15">
+<label for="good">Day that works (UTC date)</label><input id="good" type="date" value="2025-10-26">
+<button id="go">Check</button>
+<div id="out"></div>
+<script>
+const NCI='https://thredds.nci.org.au/thredds',out=document.getElementById('out');
+const row=(name)=>{const d=document.createElement('div');d.className='row';d.innerHTML=`<b>${name}</b><span class="wait">Testing…</span><span class="more"></span>`;out.appendChild(d);const[s,m]=d.querySelectorAll('span');return{set(c,t,x){s.className=c;s.textContent=t;if(x!=null)m.textContent=x}}};
+async function grab(url,opt={},ms=30000){const c=new AbortController(),t0=performance.now(),to=setTimeout(()=>c.abort(),ms);
+  try{const r=await fetch(url,{...opt,signal:c.signal,cache:'no-store'});const buf=opt.method==='HEAD'?new ArrayBuffer(0):await r.arrayBuffer();clearTimeout(to);
+    return{status:r.status,buf,len:r.headers.get('Content-Length'),cr:r.headers.get('Content-Range'),ar:r.headers.get('Accept-Ranges'),secs:((performance.now()-t0)/1000).toFixed(1)}}
+  catch(e){clearTimeout(to);return{error:e.name==='AbortError'?`no answer after ${ms/1000} s`:'blocked or network error ('+e.message+')'}}}
+(async()=>{try{const r=await fetch(NCI+'/fileServer/rq0/radar_site_list.csv');const L=(await r.text()).replace(/\r/g,'').split('\n').filter(Boolean),h=L.shift().split(',');
+  const iI=h.indexOf('id'),iN=h.indexOf('location'),seen=new Map();for(const l of L){const c=l.split(','),id=parseInt(c[iI]);if(id&&!seen.has(id))seen.set(id,c[iN]||('Radar '+id))}
+  const sel=document.getElementById('site');sel.innerHTML='';[...seen].sort((a,b)=>a[1].localeCompare(b[1])).forEach(([id,n])=>{const o=document.createElement('option');o.value=id;o.textContent=`${n} (${id})`;sel.appendChild(o)});
+  const t=[...sel.options].find(o=>/toowoomba/i.test(o.textContent));if(t)sel.value=t.value}catch(e){document.getElementById('site').innerHTML='<option>Radar list failed: '+e.message+'</option>'}})();
+async function checkDay(id,day,tag){
+  const d=day.replace(/-/g,''),y=d.slice(0,4),url=`${NCI}/fileServer/rq0/${id}/${y}/vol/${id}_${d}.pvol.zip`;
+  // 1. catalogue: is the file listed, and how big?
+  let r=row(`${tag}: catalogue for ${y}`);const c=await grab(`${NCI}/catalog/rq0/${id}/${y}/vol/catalog.xml`);
+  if(c.error)r.set('bad','FAILED: '+c.error);else{const x=new TextDecoder().decode(c.buf),names=[...x.matchAll(/name="([^"]+)"/g)].map(m=>m[1]).filter(n=>/\d{8}/.test(n));
+    const i=x.indexOf(`${id}_${d}`),sz=i>=0?(/<dataSize[^>]*>\s*([\d.]+\s*\w*)/.exec(x.slice(i,i+1500))||/dataSize[^>]*units="([^"]+)"[^>]*>\s*([\d.]+)/.exec(x.slice(i,i+1500))):null;
+    r.set(c.status===200?'ok':'bad',`status ${c.status} in ${c.secs} s · ${names.length} files listed · this day ${i>=0?'IS listed':'is NOT listed'}${sz?' · size '+sz.slice(1).join(' '):''}`,
+      'Newest files listed:\n'+names.slice(-4).join('\n')+(names.some(n=>n.includes(d))?'\nMatching this day:\n'+names.filter(n=>n.includes(d)).join('\n'):''))}
+  // 2. file size from the server
+  r=row(`${tag}: file size (HEAD)`);const h=await grab(url,{method:'HEAD'},20000);
+  if(h.error)r.set('bad','FAILED: '+h.error);else r.set(h.status===200?'ok':'bad',`status ${h.status} in ${h.secs} s · size ${h.len?(+h.len/1e6).toFixed(1)+' MB':'not given'} · ranges: ${h.ar||'not said'}`);
+  // 3. first 1 KB
+  r=row(`${tag}: first 1 KB`);const a=await grab(url,{headers:{Range:'bytes=0-1023'}},45000);
+  if(a.error)r.set('bad','FAILED: '+a.error);else{const u=new Uint8Array(a.buf);r.set(a.status===206?'ok':'bad',`status ${a.status} in ${a.secs} s · got ${a.buf.byteLength} bytes${u[0]===0x50&&u[1]===0x4b?' · real zip':''}`,a.cr||'')}
+  // 4. last 64 KB (where the index lives)
+  if(h.len){const n=+h.len;r=row(`${tag}: last 64 KB (the index)`);const b=await grab(url,{headers:{Range:`bytes=${n-65536}-${n-1}`}},60000);
+    if(b.error)r.set('bad','FAILED: '+b.error);else{const u=new Uint8Array(b.buf);let f=false;for(let i=u.length-22;i>=0;i--)if(u[i]===0x50&&u[i+1]===0x4b&&u[i+2]===5&&u[i+3]===6){f=true;break}
+      r.set(b.status===206?'ok':'bad',`status ${b.status} in ${b.secs} s · got ${b.buf.byteLength} bytes · ${f?'index found':'no index found'}`,b.cr||'')}}
+}
+document.getElementById('go').onclick=async()=>{out.innerHTML='';const id=document.getElementById('site').value;
+  await checkDay(id,document.getElementById('bad').value,'Failing day');await checkDay(id,document.getElementById('good').value,'Working day');
+  const r=row('Done');r.set('ok','All checks finished. Screenshot the page.')};
+</script>
+</body>
+</html>
