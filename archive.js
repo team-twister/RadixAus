@@ -6,11 +6,26 @@ const Archive = (() => {
   const r16 = (b, o) => b[o] | (b[o + 1] << 8);
   const r64 = (b, o) => r32(b, o) + r32(b, o + 4) * 4294967296;
 
-  async function range(url, start, end, signal) {   // inclusive end; exact "bytes=a-b" form needs no CORS preflight
-    const res = await fetch(url, { headers: { Range: `bytes=${start}-${end}` }, signal, cache: 'no-store' });
-    if (res.status === 404) throw new Error('not-found');
-    if (res.status !== 206) { await res.body?.cancel(); throw new Error(`The archive didn't return part of the file (status ${res.status}).`); }
-    return new Uint8Array(await res.arrayBuffer());
+  // every request gets a time limit, so a slow or silent archive server gives a clear message instead of hanging forever
+  async function timed(url, opts = {}, ms = 30000, what = 'the archive') {
+    const ctl = new AbortController(), outer = opts.signal; let timedOut = false;
+    const to = setTimeout(() => { timedOut = true; ctl.abort(); }, ms);
+    const pass = () => ctl.abort(); if (outer) { if (outer.aborted) ctl.abort(); else outer.addEventListener('abort', pass, { once: true }); }
+    try { const res = await fetch(url, { ...opts, signal: ctl.signal }); return { res, done: () => { clearTimeout(to); outer && outer.removeEventListener('abort', pass); } }; }
+    catch (e) {
+      clearTimeout(to); outer && outer.removeEventListener('abort', pass);
+      if (timedOut) throw new Error(`${what} didn't answer within ${Math.round(ms / 1000)} seconds. NCI's archive server may be down or very slow right now. Try again later.`);
+      if (outer && outer.aborted) throw e;
+      throw new Error(`${what} couldn't be reached (${e.message || 'network error'}). NCI's archive server may be down, or it blocked the request.`);
+    }
+  }
+  async function range(url, start, end, signal, ms = 60000) {   // inclusive end; exact "bytes=a-b" form needs no CORS preflight
+    const { res, done } = await timed(url, { headers: { Range: `bytes=${start}-${end}` }, signal, cache: 'no-store' }, ms, 'The archive file');
+    try {
+      if (res.status === 404) throw new Error('not-found');
+      if (res.status !== 206) { await res.body?.cancel(); throw new Error(`The archive didn't return part of the file (status ${res.status}).`); }
+      return new Uint8Array(await res.arrayBuffer());
+    } finally { done(); }
   }
   async function rangeParallel(url, start, end, onProgress, signal) {
     const total = end - start + 1, parts = total > 4e6 ? 4 : total > 1.5e6 ? 2 : 1, size = Math.ceil(total / parts);
@@ -34,7 +49,7 @@ const Archive = (() => {
   }
   const pdate = s => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s || ''); return m ? new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])) : null; };
   async function sites() {
-    const res = await fetch(`${NCI}/fileServer/rq0/radar_site_list.csv`);
+    const { res, done } = await timed(`${NCI}/fileServer/rq0/radar_site_list.csv`, {}, 30000, 'The archive radar list'); done();
     if (!res.ok) throw new Error(`Couldn't load the radar list (status ${res.status}).`);
     const rows = parseCSV(await res.text());
     const byId = new Map();
@@ -61,9 +76,11 @@ const Archive = (() => {
   /* ---- one radar-day: find the zip's size and read its table of contents ---- */
   const dayURL = (id, d) => `${NCI}/fileServer/rq0/${id}/${d.slice(0, 4)}/vol/${id}_${d}.pvol.zip`;
   async function approxSize(id, d) {
-    const res = await fetch(`${NCI}/catalog/rq0/${id}/${d.slice(0, 4)}/vol/catalog.xml`);
+    let res;
+    try { const t = await timed(`${NCI}/catalog/rq0/${id}/${d.slice(0, 4)}/vol/catalog.xml`, {}, 25000, 'The archive catalogue'); res = t.res; try { if (res.ok) res.xml = await res.text(); } finally { t.done(); } }
+    catch (e) { return null; }
     if (!res.ok) return null;
-    const xml = await res.text(), i = xml.indexOf(`${id}_${d}.pvol.zip`);
+    const xml = res.xml, i = xml.indexOf(`${id}_${d}.pvol.zip`);
     if (i < 0) throw new Error('not-found');
     const m = /<dataSize[^>]*units="([^"]+)"[^>]*>\s*([\d.]+)/.exec(xml.slice(i, i + 1500)) || /<dataSize[^>]*>\s*([\d.]+)/.exec(xml.slice(i, i + 1500));
     if (!m) return null;
@@ -74,13 +91,14 @@ const Archive = (() => {
   async function openDay(id, d) {     // d = 'YYYYMMDD'
     const url = dayURL(id, d);
     let size = null;
-    try { const h = await fetch(url, { method: 'HEAD' }); if (h.status === 404) throw new Error('not-found'); const n = +h.headers.get('Content-Length'); if (n > 0) size = n; }
+    // file size: ask the server (HEAD); if that's slow or blocked, use the size listed in the catalogue instead
+    try { const { res: h, done } = await timed(url, { method: 'HEAD', cache: 'no-store' }, 15000, 'The archive'); done(); if (h.status === 404) throw new Error('not-found'); const n = +h.headers.get('Content-Length'); if (n > 0) size = n; }
     catch (e) { if (e.message === 'not-found') throw e; }
     let tail, tailStart;
     if (size) { tailStart = Math.max(0, size - 70000); tail = await range(url, tailStart, size - 1); }
     else {
       const ap = await approxSize(id, d);
-      if (!ap) throw new Error("Couldn't work out the archive file size.");
+      if (!ap) throw new Error("NCI's archive server isn't answering right now (couldn't get the file size or the catalogue). It may be down or under maintenance. Try again later.");
       const slack = ap.exact ? 70000 : ap.size * 0.004 + 70000;
       tailStart = Math.max(0, Math.floor(ap.size - slack)); tail = await range(url, tailStart, Math.ceil(ap.size + slack));
       size = tailStart + tail.length;               // the server stops at the end of the file
