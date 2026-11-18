@@ -19,7 +19,7 @@ const Archive = (() => {
       throw new Error(`${what} couldn't be reached (${e.message || 'network error'}). NCI's archive server may be down, or it blocked the request.`);
     }
   }
-  async function range(url, start, end, signal, ms = 60000) {   // inclusive end; exact "bytes=a-b" form needs no CORS preflight
+  async function range(url, start, end, signal, ms = 120000) {   // inclusive end; exact "bytes=a-b" form needs no CORS preflight
     const { res, done } = await timed(url, { headers: { Range: `bytes=${start}-${end}` }, signal, cache: 'no-store' }, ms, 'The archive file');
     try {
       if (res.status === 404) throw new Error('not-found');
@@ -86,7 +86,9 @@ const Archive = (() => {
     if (!m) return null;
     const unit = m.length === 3 ? m[1] : 'bytes', val = parseFloat(m.length === 3 ? m[2] : m[1]);
     const mult = /gbyte/i.test(unit) ? 1e9 : /mbyte/i.test(unit) ? 1e6 : /kbyte/i.test(unit) ? 1e3 : 1;
-    return { size: val * mult, exact: mult === 1 };
+    // the catalogue rounds (e.g. "2.585 Gbytes"), so the true size is within one unit of the last digit shown
+    const dec = ((m.length === 3 ? m[2] : m[1]).split('.')[1] || '').length, step = Math.pow(10, -dec) * mult;
+    return { size: val * mult, exact: mult === 1, step };
   }
   async function openDay(id, d) {     // d = 'YYYYMMDD'
     const url = dayURL(id, d);
@@ -99,8 +101,9 @@ const Archive = (() => {
     else {
       const ap = await approxSize(id, d);
       if (!ap) throw new Error("NCI's archive server isn't answering right now (couldn't get the file size or the catalogue). It may be down or under maintenance. Try again later.");
-      const slack = ap.exact ? 70000 : ap.size * 0.004 + 70000;
-      tailStart = Math.max(0, Math.floor(ap.size - slack)); tail = await range(url, tailStart, Math.ceil(ap.size + slack));
+      const slack = ap.exact ? 70000 : ap.step + 70000;   // read only ~2 MB around the end, not ~20 MB
+      // NCI can take 40+ seconds to start sending recent files, so wait longer here
+      tailStart = Math.max(0, Math.floor(ap.size - slack)); tail = await range(url, tailStart, Math.ceil(ap.size + slack), undefined, 150000);
       size = tailStart + tail.length;               // the server stops at the end of the file
     }
     // end-of-central-directory record
